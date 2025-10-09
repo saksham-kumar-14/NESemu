@@ -3,6 +3,8 @@
 #include <vector>
 #include <iostream>
 
+class Bus;
+
 class CPU6502 {
 public:
     uint8_t A = 0x00;
@@ -12,8 +14,6 @@ public:
     uint16_t PC = 0x0000;
     uint8_t P = 0x24;
 
-    std::vector<uint8_t> memory;
-
     CPU6502();
 
     void Reset();
@@ -21,8 +21,14 @@ public:
     void Clock();
     void Run();
 
+    void integrateBus(Bus* b){
+        bus = b;
+    }
+
+    bool GetFlag(uint8_t bit);
 private:
     void Execute(uint8_t opcode);
-    bool GetFlag(uint8_t bit);
     void SetFlag(uint8_t bit, bool value);
+
+    Bus* bus = nullptr;
 };
