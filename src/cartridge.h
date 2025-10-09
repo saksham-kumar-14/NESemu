@@ -1,18 +1,16 @@
 #pragma once
-#include<vector>
-#include<string>
+#include <vector>
+#include <string>
 #include <cstdint>
 
-using namespace std;
-
-Class Cartridge {
+class Cartridge {
 public:
     bool romLoad = false;
-    uint8_t mapperID = 0;
-    uint8_t mirror = 0;
+    std::uint8_t mapperID = 0;
+    std::uint8_t mirror = 0;
 
-    vector<uint8_t> PRGMemory;
-    vector<uint8_t> CHRMemory;
+    std::vector<std::uint8_t> PRGMemory;
+    std::vector<std::uint8_t> CHRMemory;
 
-    Cartridge(const string& filename);
+    Cartridge(const std::string& filename);
 };
