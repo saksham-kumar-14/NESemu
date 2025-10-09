@@ -5,18 +5,21 @@
 int main() {
     Bus bus;
 
-    bus.cpuWrite(0x0000, 0x42);
-    bus.cpuWrite(0x07FF, 0x99);
+    std::vector<uint8_t> program = { 0xA9, 0x42, 0xE8, 0x00 };
 
-    assert(bus.cpuRead(0x0000) == 0x42);
-    assert(bus.cpuRead(0x0800) == 0x42);
-    assert(bus.cpuRead(0x1000) == 0x42);
+    bus.cpu.LoadProgram(program, 0x8000);
 
-    assert(bus.cpuRead(0x07FF) == 0x99);
-    assert(bus.cpuRead(0x0FFF) == 0x99);
-    assert(bus.cpuRead(0x17FF) == 0x99);
+    bus.cpu.Reset();
 
+    std::cout << "Starting CPU Run...\n";
+    bus.cpu.Run();
 
-    std::cout << ">> All mirror tests passed!\n";
+    assert(bus.cpu.A == 0x42);
+    assert(bus.cpu.X == 0x01);
+
+    std::cout << ">> CPU+Bus test passed! A=0x"
+              << std::hex << (int)bus.cpu.A
+              << " X=0x" << (int)bus.cpu.X << "\n";
+
     return 0;
 }
