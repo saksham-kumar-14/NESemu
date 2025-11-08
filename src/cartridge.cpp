@@ -1,4 +1,5 @@
 #include "cartridge.h"
+#include <cstdint>
 #include <fstream>
 #include <iostream>
 
@@ -41,4 +42,17 @@ Cartridge::Cartridge(const std::string& filename) {
 
     romLoad = true;
     ifs.close();
+}
+
+uint8_t Cartridge::ppuRead(uint16_t addr){
+    if (addr < 0x2000 and !CHRMemory.empty()){
+        return CHRMemory[addr];
+    }
+    return 0x00;
+}
+
+void Cartridge::ppuWrite(uint16_t addr, uint8_t data){
+    if(addr < 0x2000){
+        CHRMemory[addr] = data;
+    }
 }
