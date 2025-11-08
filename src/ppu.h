@@ -27,10 +27,26 @@ public:
     void RenderPatternTables(); // CHR ROME
     uint32_t NESColor(uint8_t index); // COLOR PALETTE
 
+    void cpuWrite(uint16_t addr, uint8_t data);
+    uint8_t cpuRead(uint16_t addr);
+
 private:
     Bus* bus = nullptr;
 
     std::array<uint8_t, 2048> vram{};
     std::array<uint8_t, 32> paletteRAM{};
     std::array<uint32_t, SCREEN_WIDTH * SCREEN_HEIGHT> framebuffer{};
+
+    // PPU Registers
+    uint8_t PPUCTRL = 0x00;
+    uint8_t PPUMASK = 0x00;
+    uint8_t PPUSTATUS = 0xA0;
+    uint8_t OAMADDR = 0x00;
+
+    uint16_t vramAddr = 0x0000; // current VRAM address
+    uint16_t tempAddr = 0x0000; // temporary VRAM address
+    uint8_t fineX = 0x00;       // fine x scroll
+    bool addrLatch = false;     // PPUADDR/PPUSCROLL toggle
+
+    uint8_t ppuDataBuffer = 0x00;
 };

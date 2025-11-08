@@ -3,7 +3,11 @@
 void Bus::cpuWrite(uint16_t addr, uint8_t data) {
     if (addr <= 0x1FFF) {
         RAM[addr & 0x07FF] = data; // mirroring
-    } else if (addr >= 0x8000 && addr <= 0xFFFF) {
+    }
+    else if (addr >= 0x2000 && addr <= 0x3FFF) {
+        ppu->cpuWrite(addr & 0x2007, data);
+    }
+    else if (addr >= 0x8000 && addr <= 0xFFFF) {
         if (cart && cart->romLoad && !cart->PRGMemory.empty()) {
             uint32_t mapped = addr - 0x8000;
             if (cart->PRGMemory.size() == 0x4000)
@@ -16,7 +20,11 @@ void Bus::cpuWrite(uint16_t addr, uint8_t data) {
 uint8_t Bus::cpuRead(uint16_t addr) {
     if (addr <= 0x1FFF) {
         return RAM[addr & 0x07FF];
-    } else if (addr >= 0x8000 && addr <= 0xFFFF) {
+    }
+    else if (addr >= 0x2000 && addr <= 0x3FFF) {
+        return ppu->cpuRead(addr & 0x2007);
+    }
+    else if (addr >= 0x8000 && addr <= 0xFFFF) {
         if (cart && cart->romLoad && !cart->PRGMemory.empty()) {
             uint32_t mapped = addr - 0x8000;
             if (cart->PRGMemory.size() == 0x4000)

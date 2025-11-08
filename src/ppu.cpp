@@ -143,3 +143,74 @@ void PPU::RenderPatternTables() {
         }
     }
 }
+
+uint8_t PPU::cpuRead(uint16_t addr) {
+    uint8_t data = 0x00;
+    switch (addr & 0x0007) { // mirror every 8 bytes
+        case 0x0002: // PPUSTATUS
+            data = (PPUSTATUS & 0xE0) | (ppuDataBuffer & 0x1F);
+            PPUSTATUS &= ~0x80; // clear VBlank
+            addrLatch = false;
+            break;
+        case 0x0004: // OAMDATA
+            data = 0x00; // stub for now
+            break;
+        case 0x0007: // PPUDATA
+            data = ppuDataBuffer;
+            ppuDataBuffer = ppuRead(vramAddr);
+            if (vramAddr >= 0x3F00)
+                data = ppuDataBuffer; // no delay for palette
+            vramAddr += (PPUCTRL & 0x04) ? 32 : 1;
+            break;
+    }
+    return data;
+}
+
+void PPU::cpuWrite(uint16_t addr, uint8_t data) {
+    switch (addr & 0x0007) { // mirror every 8 bytes
+        case 0x0000: // PPUCTRL
+            PPUCTRL = data;
+            tempAddr = (tempAddr & 0xF3FF) | ((data & 0x03) << 10);
+            break;
+
+        case 0x0001: // PPUMASK
+            PPUMASK = data;
+            break;
+
+        case 0x0003: // OAMADDR
+            OAMADDR = data;
+            break;
+
+        case 0x0004: // OAMDATA
+            // OAM[OAMADDR++] = data; // implement later
+            break;
+
+        case 0x0005: // PPUSCROLL
+            if (!addrLatch) {
+                fineX = data & 0x07;
+                tempAddr = (tempAddr & 0xFFE0) | (data >> 3);
+                addrLatch = true;
+            } else {
+                tempAddr = (tempAddr & 0x8FFF) | ((data & 0x07) << 12);
+                tempAddr = (tempAddr & 0xFC1F) | ((data & 0xF8) << 2);
+                addrLatch = false;
+            }
+            break;
+
+        case 0x0006: // PPUADDR
+            if (!addrLatch) {
+                tempAddr = (tempAddr & 0x00FF) | ((data & 0x3F) << 8);
+                addrLatch = true;
+            } else {
+                tempAddr = (tempAddr & 0xFF00) | data;
+                vramAddr = tempAddr;
+                addrLatch = false;
+            }
+            break;
+
+        case 0x0007: // PPUDATA
+            ppuWrite(vramAddr, data);
+            vramAddr += (PPUCTRL & 0x04) ? 32 : 1;
+            break;
+    }
+}
