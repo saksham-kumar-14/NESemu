@@ -9,6 +9,7 @@ class PPU {
 public:
     static const int SCREEN_WIDTH = 256;
     static const int SCREEN_HEIGHT = 240;
+    static const uint32_t NES_PALETTE[64];
 
     PPU();
     ~PPU();
@@ -23,12 +24,13 @@ public:
     uint8_t ppuRead(uint16_t addr);
     void ppuWrite(uint16_t addr, uint8_t data);
 
-    void RenderPatternTables();
+    void RenderPatternTables(); // CHR ROME
+    uint32_t NESColor(uint8_t index); // COLOR PALETTE
 
 private:
     Bus* bus = nullptr;
 
     std::array<uint8_t, 2048> vram{};
-    std::array<uint8_t, 32> palette{};
+    std::array<uint8_t, 32> paletteRAM{};
     std::array<uint32_t, SCREEN_WIDTH * SCREEN_HEIGHT> framebuffer{};
 };

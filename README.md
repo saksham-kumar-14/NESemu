@@ -8,6 +8,12 @@ NES emulator in c++
 - [x] CPU loop
 - [x] Bus integration in CPU
 - [ ] PPU
+  - [x] CHR ROM
+  - [x] NES color palette system
+  - [ ] PPU registers
+  - [ ] Nametables
+  - [ ] VBlank
+  - [ ] OAM rendering
 - [ ] Mapper
 - [ ] Controller
 - [ ] Timer

@@ -2,6 +2,7 @@
 #include "bus.h"
 #include <cstdint>
 #include <cstring>
+#include <iostream>
 
 PPU::PPU() {
     Reset();
@@ -11,8 +12,14 @@ PPU::~PPU() {}
 
 void PPU::Reset() {
     vram.fill(0);
-    palette.fill(0);
-    framebuffer.fill(0x000000FF);
+    paletteRAM.fill(0);
+    framebuffer.fill(0x000000);
+
+    // Default colors (for pattern table)
+    paletteRAM[0] = 0x0F;
+    paletteRAM[1] = 0x11;
+    paletteRAM[2] = 0x21;
+    paletteRAM[3] = 0x31;
 }
 
 uint8_t PPU::ppuRead(uint16_t addr) {
@@ -25,7 +32,13 @@ uint8_t PPU::ppuRead(uint16_t addr) {
         return vram[addr & 0x07FF];
     }
     else if (addr >= 0x3F00 && addr <= 0x3FFF) {
-        return palette[addr & 0x001F];
+        addr &= 0x001F;
+        // Palette mirroring
+        if (addr == 0x0010) addr = 0x0000;
+        if (addr == 0x0014) addr = 0x0004;
+        if (addr == 0x0018) addr = 0x0008;
+        if (addr == 0x001C) addr = 0x000C;
+        return paletteRAM[addr] & 0x3F;
     }
 
     return 0x00;
@@ -41,12 +54,17 @@ void PPU::ppuWrite(uint16_t addr, uint8_t data) {
         vram[addr & 0x07FF] = data;
     }
     else if (addr >= 0x3F00 && addr <= 0x3FFF) {
-        palette[addr & 0x001F] = data;
+        addr &= 0x001F;
+        if (addr == 0x0010) addr = 0x0000;
+        if (addr == 0x0014) addr = 0x0004;
+        if (addr == 0x0018) addr = 0x0008;
+        if (addr == 0x001C) addr = 0x000C;
+        paletteRAM[addr] = data & 0x3F;
     }
 }
 
 void PPU::Step() {
-    // Each PPU cycle would go here
+    // Each PPU cycle will go here
 }
 
 void PPU::RenderFrame() {
@@ -64,46 +82,62 @@ void PPU::UpdateSurface(SDL_Surface* surface) {
     SDL_UnlockSurface(surface);
 }
 
-// For viewing CHR ROM tiles
-void PPU::RenderPatternTables(){
-    if(!bus || !bus->cart || bus->cart->CHRMemory.empty()) {
+// Official NES master palette (approximate RGB values)
+const uint32_t PPU::NES_PALETTE[64] = {
+    0x7C7C7C, 0x0000FC, 0x0000BC, 0x4428BC, 0x940084, 0xA80020, 0xA81000, 0x881400,
+    0x503000, 0x007800, 0x006800, 0x005800, 0x004058, 0x000000, 0x000000, 0x000000,
+    0xBCBCBC, 0x0078F8, 0x0058F8, 0x6844FC, 0xD800CC, 0xE40058, 0xF83800, 0xE45C10,
+    0xAC7C00, 0x00B800, 0x00A800, 0x00A844, 0x008888, 0x000000, 0x000000, 0x000000,
+    0xF8F8F8, 0x3CBCFC, 0x6888FC, 0x9878F8, 0xF878F8, 0xF85898, 0xF87858, 0xFCA044,
+    0xF8B800, 0xB8F818, 0x58D854, 0x58F898, 0x00E8D8, 0x787878, 0x000000, 0x000000,
+    0xFCFCFC, 0xA4E4FC, 0xB8B8F8, 0xD8B8F8, 0xF8B8F8, 0xF8A4C0, 0xF0D0B0, 0xFCE0A8,
+    0xF8D878, 0xD8F878, 0xB8F8B8, 0xB8F8D8, 0x00FCFC, 0xF8D8F8, 0x000000, 0x000000
+};
+
+uint32_t PPU::NESColor(uint8_t index) {
+    return NES_PALETTE[index % 64];
+}
+
+
+void PPU::RenderPatternTables() {
+    if (!bus || !bus->cart || bus->cart->CHRMemory.empty()) {
         std::cerr << "NO ROM FOUND\n";
         return;
     }
 
-    // acc to nes std layout, 16 tiles per row
-    // each tile = 8x8 pixels
     auto &chr = bus->cart->CHRMemory;
     const int tilesPerRow = 16;
     const int tileSize = 8;
     const int bytesPerTile = 16;
 
-    framebuffer.fill(0x000000FF);
+    framebuffer.fill(0x000000);
 
     int nTiles = chr.size() / bytesPerTile;
+    std::cout << "Rendering " << nTiles << " CHR tiles\n";
 
-    for(int i = 0; i < nTiles; ++i){
+    for (int i = 0; i < nTiles; ++i) {
         int tileX = (i % tilesPerRow) * tileSize;
         int tileY = (i / tilesPerRow) * tileSize;
 
         int baseAddr = i * bytesPerTile;
 
-        //
-        for(int row = 0; row < 8; ++row){
+        for (int row = 0; row < 8; ++row) {
             uint8_t plane0 = chr[baseAddr + row];
             uint8_t plane1 = chr[baseAddr + row + 8];
 
-            for(int col = 0; col < 8; ++col){
+            for (int col = 0; col < 8; ++col) {
                 uint8_t lsbit = (plane0 >> (7 - col)) & 1;
                 uint8_t msbit = (plane1 >> (7 - col)) & 1;
                 uint8_t pixel = (msbit << 1) | lsbit;
 
-                uint8_t shade = pixel * 85;
+                uint8_t colorIndex = paletteRAM[pixel & 0x03];
+                uint32_t color = NESColor(colorIndex);
+
                 int x = tileX + col;
                 int y = tileY + row;
 
-                if(x < SCREEN_WIDTH and y < SCREEN_HEIGHT) {
-                    framebuffer[y * SCREEN_WIDTH + x] = (shade << 16) | (shade << 6) | shade;
+                if (x < SCREEN_WIDTH && y < SCREEN_HEIGHT) {
+                    framebuffer[y * SCREEN_WIDTH + x] = color;
                 }
             }
         }
