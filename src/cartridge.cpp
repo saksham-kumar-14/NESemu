@@ -40,6 +40,7 @@ Cartridge::Cartridge(const std::string& filename) {
         ifs.read(reinterpret_cast<char*>(CHRMemory.data()), CHRMemory.size());
     }
 
+
     romLoad = true;
     ifs.close();
 }

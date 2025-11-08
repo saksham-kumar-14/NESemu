@@ -23,6 +23,8 @@ public:
     uint8_t ppuRead(uint16_t addr);
     void ppuWrite(uint16_t addr, uint8_t data);
 
+    void RenderPatternTables();
+
 private:
     Bus* bus = nullptr;
 
