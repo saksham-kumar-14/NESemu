@@ -1,6 +1,7 @@
 #pragma once
 #include "cartridge.h"
 #include "cpu.h"
+#include "ppu.h"
 #include <array>
 #include <cstdint>
 #include <iostream>
@@ -18,6 +19,7 @@ class Bus {
 public:
     CPU6502 cpu;
     Cartridge* cart = nullptr;
+    PPU* ppu = nullptr;
 
     static constexpr size_t RAMsize = 2048; // 2KB
     std::array<uint8_t, RAMsize> RAM{};
@@ -29,6 +31,9 @@ public:
 
     void ConnectCartridge(Cartridge* c) {
         cart = c;
+    }
+    void ConnectPPU(PPU* p) {
+        ppu = p;
     }
 
     void cpuWrite(uint16_t addr, uint8_t data);
