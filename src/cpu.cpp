@@ -1,5 +1,6 @@
 #include "cpu.h"
 #include <cstdint>
+#include <ios>
 #include<iostream>
 #include <sys/types.h>
 #include "bus.h"
@@ -47,18 +48,23 @@ bool CPU6502::GetFlag(uint8_t bit){
 }
 
 void CPU6502::Clock(){
+    uint16_t oldPC = PC;
     uint8_t opcode = bus->cpuRead(PC++);
+    std::cout << "FETCH OPCODE " << std::hex << (int)opcode
+              << " at PC=" << oldPC << std::endl;
     Execute(opcode);
 }
 
 void CPU6502::Execute(uint8_t opcode) {
-    // helper lambda outside switch (to avoid switch scope jump issue)
     auto CMP = [&](uint8_t reg, uint8_t val) {
         uint16_t tmp = reg - val;
         SetFlag(C, reg >= val);
         SetFlag(Z, (tmp & 0xFF) == 0);
         SetFlag(N, tmp & 0x80);
     };
+
+    std::cout << "EXECUTING OPCODE " << std::hex << (int)opcode
+              << " at PC=" << (int)PC << std::endl;
 
     switch (opcode) {
 

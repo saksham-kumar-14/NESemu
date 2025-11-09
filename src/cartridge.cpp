@@ -38,6 +38,11 @@ Cartridge::Cartridge(const std::string& filename) {
     romLoad = true;
     ifs.close();
 
+    std::cout << "First PRG bytes: ";
+    for (int i = 0; i < 8; ++i)
+        std::cout << std::hex << (int)PRGMemory[i] << " ";
+    std::cout << "\n";
+
     std::cout << "PRG Banks: " << (int)prgBanks
               << " (total " << (prgBanks * 16) << "KB)"
               << ", CHR Banks: " << (int)chrBanks
