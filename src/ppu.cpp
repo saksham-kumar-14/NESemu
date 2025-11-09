@@ -98,7 +98,6 @@ uint32_t PPU::NESColor(uint8_t index) {
     return NES_PALETTE[index % 64];
 }
 
-
 void PPU::RenderPatternTables() {
     if (!bus || !bus->cart || bus->cart->CHRMemory.empty()) {
         std::cerr << "NO ROM FOUND\n";
@@ -213,4 +212,64 @@ void PPU::cpuWrite(uint16_t addr, uint8_t data) {
             vramAddr += (PPUCTRL & 0x04) ? 32 : 1;
             break;
     }
+}
+
+// $2000–$23BF - Name Table - 32 × 30 = 960 bytes (tile indices)
+void PPU::RenderNametable(uint16_t baseAddr){
+    if (!bus || !bus->cart || bus->cart->CHRMemory.empty()) {
+        std::cerr << "NO ROM FOUND\n";
+        return;
+    }
+    framebuffer.fill(0x000000);
+
+    auto &chr = bus->cart->CHRMemory;
+    const int tileSize = 8;
+    const int bytesPerTile = 16;
+
+    for(int row = 0; row < 30; ++row){
+        for(int col = 0; col < 32; ++col){
+            uint16_t tileAddr = baseAddr + (row * 32) + col;
+            uint8_t tileIndex = ppuRead(tileAddr);
+
+            // get pattern table address
+            uint16_t patternBase = (PPUCTRL & 0x10) ? 0x1000 : 0x0000;
+            uint16_t chrAddr = patternBase + tileAddr * bytesPerTile;
+
+            // which palette to use
+            uint16_t attrBase = baseAddr + 0x03C0;
+            int attrX = col / 4;
+            int attrY = row / 4;
+            uint8_t attrByte = ppuRead(attrBase + attrY * 8 + attrX);
+
+            int shift = ((row & 4) / 2) * 4 + ((col & 4) / 2) * 2;
+            uint8_t palleteSelect = (attrByte >> shift) & 0x03;
+            uint16_t palleteBase = 0x3F00 + (palleteSelect << 2);
+
+
+            // draw 8x8 tile
+            for(int i = 0; i < 8; ++i){     // y
+                uint8_t plane0 = chr[chrAddr + i];
+                uint8_t plane1 = chr[chrAddr + i + 8];
+                for(int j = 0; j < 8; ++j){ // x
+                    uint8_t lsbit = (plane0 >> (7 - j)) & 1;
+                    uint8_t msbit = (plane1 >> (7 - j)) & 1;
+                    uint8_t pixel = (msbit << 1) | lsbit;
+
+                    if(pixel == 0) continue;
+
+                    uint8_t colorIndex = ppuRead(palleteBase + pixel);
+                    uint32_t color = NESColor(colorIndex);
+
+                    int x = col * tileSize + j;
+                    int y = row * tileSize + i;
+                    if (x < SCREEN_WIDTH && y < SCREEN_HEIGHT){
+                        framebuffer[y * SCREEN_WIDTH + x] = color;
+                    }
+                }
+            }
+        }
+    }
+
+    std::cout << "Rendered Nametable from $"
+                  << std::hex << baseAddr << std::dec << "\n";
 }

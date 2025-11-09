@@ -30,6 +30,8 @@ public:
     void cpuWrite(uint16_t addr, uint8_t data);
     uint8_t cpuRead(uint16_t addr);
 
+    void RenderNametable(uint16_t baseAddr);
+
 private:
     Bus* bus = nullptr;
 
