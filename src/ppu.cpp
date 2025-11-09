@@ -319,3 +319,45 @@ void PPU::RenderSprites(){
         }
     }
 }
+
+// CPU-PPU sync
+/*
+    341 cycles per scanline, 262 scanlines per frame
+    VBLANK after scanline 241
+    scanline 261 as pre render to clear VBLANK
+ */
+void PPU::Clock(){
+
+    ++cycle;
+    if(cycle > 340){
+        cycle = 0;
+        ++scanline;
+        if(scanline > 261){
+            scanline = 0;
+            ++frame;
+            frameComplete = true;
+        }
+    }
+
+
+    if (scanline == 241 && cycle == 1){
+        PPUSTATUS |= 0x80;
+        nmiOccured = true;
+        nmiOutput = (PPUCTRL & 0x80) != 0;
+        if(nmiOutput && !nmiPrev){
+            // cpu ll handle nmi from here
+            if(bus){
+                bus->cpu.NMI();
+            }
+        }
+        nmiPrev = nmiOutput;
+    }
+
+    if (scanline == 261 && cycle == 1){
+        PPUSTATUS &= ~0x80; // clear VBlank
+        nmiOccured = false;
+        nmiPrev = false;
+        frameComplete = false;
+    }
+
+}

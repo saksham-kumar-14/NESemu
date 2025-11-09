@@ -12,8 +12,8 @@ NES emulator in c++
   - [x] NES color palette system
   - [x] PPU registers
   - [x] Nametables
-  - [x] VBlank
   - [x] OAM rendering
+  - [ ] CPU PPU sync
 - [ ] Mapper
 - [ ] Controller
 - [ ] Timer

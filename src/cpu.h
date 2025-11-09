@@ -26,6 +26,9 @@ public:
     }
 
     bool GetFlag(uint8_t bit);
+
+    void NMI(); // CPU PPU sync
+
 private:
     void Execute(uint8_t opcode);
     void SetFlag(uint8_t bit, bool value);

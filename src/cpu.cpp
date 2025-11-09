@@ -20,9 +20,11 @@ void CPU6502::Reset(){
     SP = 0xFD;
     P = 0x24;
 
-    uint16_t lo = bus->cpuRead(0xFFFC);
-    uint16_t hi = bus->cpuRead(0xFFFD);
-    PC = (hi << 8) | lo;
+    uint8_t rl = bus->cpuRead(0xFFFC);
+    uint8_t rh = bus->cpuRead(0xFFFD);
+    PC = (rh << 8) | rl;
+    std::cout << "Reset vector: lo=" << std::hex << (int)rl << " hi=" << (int)rh << " PC=$"
+              << PC << std::dec << "\n";
 }
 
 void CPU6502::LoadProgram(const std::vector<uint8_t>& program, uint16_t startAddr){
@@ -46,11 +48,18 @@ bool CPU6502::GetFlag(uint8_t bit){
 
 void CPU6502::Clock(){
     uint8_t opcode = bus->cpuRead(PC++);
-    std::cout << std::hex << "PC=" << PC << " OPCODE=" << (int)opcode << "\n";
     Execute(opcode);
 }
 
 void CPU6502::Execute(uint8_t opcode) {
+    // helper lambda outside switch (to avoid switch scope jump issue)
+    auto CMP = [&](uint8_t reg, uint8_t val) {
+        uint16_t tmp = reg - val;
+        SetFlag(C, reg >= val);
+        SetFlag(Z, (tmp & 0xFF) == 0);
+        SetFlag(N, tmp & 0x80);
+    };
+
     switch (opcode) {
 
         //
@@ -66,25 +75,27 @@ void CPU6502::Execute(uint8_t opcode) {
             break;
         }
 
-        // LDX #imm
-        case 0xA2: {
-            uint8_t value = bus->cpuRead(PC++);
-            X = value;
-            SetFlag(Z, X == 0);
-            SetFlag(N, X & 0x80);
+        // LDA zp
+        case 0xA5: {
+            uint8_t addr = bus->cpuRead(PC++);
+            A = bus->cpuRead(addr);
+            SetFlag(Z, A == 0);
+            SetFlag(N, A & 0x80);
             break;
         }
 
-        // LDY #imm
-        case 0xA0: {
-            uint8_t value = bus->cpuRead(PC++);
-            Y = value;
-            SetFlag(Z, Y == 0);
-            SetFlag(N, Y & 0x80);
+        // LDA abs
+        case 0xAD: {
+            uint16_t lo = bus->cpuRead(PC++);
+            uint16_t hi = bus->cpuRead(PC++);
+            uint16_t addr = (hi << 8) | lo;
+            A = bus->cpuRead(addr);
+            SetFlag(Z, A == 0);
+            SetFlag(N, A & 0x80);
             break;
         }
 
-        // STA $addr (absolute)
+        // STA abs
         case 0x8D: {
             uint16_t lo = bus->cpuRead(PC++);
             uint16_t hi = bus->cpuRead(PC++);
@@ -93,102 +104,25 @@ void CPU6502::Execute(uint8_t opcode) {
             break;
         }
 
-        // STX $addr (absolute)
-        case 0x8E: {
-            uint16_t lo = bus->cpuRead(PC++);
-            uint16_t hi = bus->cpuRead(PC++);
-            uint16_t addr = (hi << 8) | lo;
-            bus->cpuWrite(addr, X);
-            break;
-        }
-
-        // STY $addr (absolute)
-        case 0x8C: {
-            uint16_t lo = bus->cpuRead(PC++);
-            uint16_t hi = bus->cpuRead(PC++);
-            uint16_t addr = (hi << 8) | lo;
-            bus->cpuWrite(addr, Y);
+        // STA zp
+        case 0x85: {
+            uint8_t addr = bus->cpuRead(PC++);
+            bus->cpuWrite(addr, A);
             break;
         }
 
         //
-        // --- Register Transfer ---
+        // --- Register Transfers ---
         //
-
-        // TAX
-        case 0xAA: {
-            X = A;
-            SetFlag(Z, X == 0);
-            SetFlag(N, X & 0x80);
-            break;
-        }
-
-        // TAY
-        case 0xA8: {
-            Y = A;
-            SetFlag(Z, Y == 0);
-            SetFlag(N, Y & 0x80);
-            break;
-        }
-
-        // TXA
-        case 0x8A: {
-            A = X;
-            SetFlag(Z, A == 0);
-            SetFlag(N, A & 0x80);
-            break;
-        }
-
-        // TYA
-        case 0x98: {
-            A = Y;
-            SetFlag(Z, A == 0);
-            SetFlag(N, A & 0x80);
-            break;
-        }
-
-        //
-        // --- Increment / Decrement ---
-        //
-
-        // INX
-        case 0xE8: {
-            X++;
-            SetFlag(Z, X == 0);
-            SetFlag(N, X & 0x80);
-            break;
-        }
-
-        // INY
-        case 0xC8: {
-            Y++;
-            SetFlag(Z, Y == 0);
-            SetFlag(N, Y & 0x80);
-            break;
-        }
-
-        // DEX
-        case 0xCA: {
-            X--;
-            SetFlag(Z, X == 0);
-            SetFlag(N, X & 0x80);
-            break;
-        }
-
-        // DEY
-        case 0x88: {
-            Y--;
-            SetFlag(Z, Y == 0);
-            SetFlag(N, Y & 0x80);
-            break;
-        }
+        case 0xAA: X = A; SetFlag(Z, X == 0); SetFlag(N, X & 0x80); break; // TAX
+        case 0xA8: Y = A; SetFlag(Z, Y == 0); SetFlag(N, Y & 0x80); break; // TAY
+        case 0x8A: A = X; SetFlag(Z, A == 0); SetFlag(N, A & 0x80); break; // TXA
+        case 0x98: A = Y; SetFlag(Z, A == 0); SetFlag(N, A & 0x80); break; // TYA
 
         //
         // --- Arithmetic ---
         //
-
-        // ADC #imm
-        case 0x69: {
+        case 0x69: { // ADC #imm
             uint8_t value = bus->cpuRead(PC++);
             uint16_t sum = A + value + GetFlag(C);
             SetFlag(C, sum > 0xFF);
@@ -199,8 +133,7 @@ void CPU6502::Execute(uint8_t opcode) {
             break;
         }
 
-        // SBC #imm
-        case 0xE9: {
+        case 0xE9: { // SBC #imm
             uint8_t value = bus->cpuRead(PC++);
             uint16_t diff = A - value - (1 - GetFlag(C));
             SetFlag(C, diff < 0x100);
@@ -214,9 +147,7 @@ void CPU6502::Execute(uint8_t opcode) {
         //
         // --- Logical ---
         //
-
-        // AND #imm
-        case 0x29: {
+        case 0x29: { // AND #imm
             uint8_t value = bus->cpuRead(PC++);
             A &= value;
             SetFlag(Z, A == 0);
@@ -224,8 +155,7 @@ void CPU6502::Execute(uint8_t opcode) {
             break;
         }
 
-        // ORA #imm
-        case 0x09: {
+        case 0x09: { // ORA #imm
             uint8_t value = bus->cpuRead(PC++);
             A |= value;
             SetFlag(Z, A == 0);
@@ -233,8 +163,7 @@ void CPU6502::Execute(uint8_t opcode) {
             break;
         }
 
-        // EOR #imm
-        case 0x49: {
+        case 0x49: { // EOR #imm
             uint8_t value = bus->cpuRead(PC++);
             A ^= value;
             SetFlag(Z, A == 0);
@@ -242,39 +171,97 @@ void CPU6502::Execute(uint8_t opcode) {
             break;
         }
 
-        //
-        // --- Control ---
-        //
-
-        // NOP
-        case 0xEA: {
+        case 0x24: { // BIT zp
+            uint8_t addr = bus->cpuRead(PC++);
+            uint8_t val = bus->cpuRead(addr);
+            SetFlag(Z, (A & val) == 0);
+            SetFlag(V, val & 0x40);
+            SetFlag(N, val & 0x80);
             break;
         }
 
-        // BRK
-        case 0x00: {
-            SetFlag(B, true);
-            std::cout << "BRK reached\n";
-            break;
-        }
+        //
+        // --- Stack Operations ---
+        //
+        case 0x48: bus->cpuWrite(0x0100 + SP--, A); break; // PHA
+        case 0x68: A = bus->cpuRead(0x0100 + ++SP); SetFlag(Z, A == 0); SetFlag(N, A & 0x80); break; // PLA
+        case 0x08: bus->cpuWrite(0x0100 + SP--, P | 0x10); break; // PHP
+        case 0x28: P = bus->cpuRead(0x0100 + ++SP); break; // PLP
 
-        // JMP Absolute
-        case 0x4C: {
+        //
+        // --- Jumps/Subroutines ---
+        //
+        case 0x4C: { // JMP abs
             uint16_t lo = bus->cpuRead(PC++);
             uint16_t hi = bus->cpuRead(PC++);
             PC = (hi << 8) | lo;
             break;
         }
 
+        case 0x6C: { // JMP indirect
+            uint16_t ptrLo = bus->cpuRead(PC++);
+            uint16_t ptrHi = bus->cpuRead(PC++);
+            uint16_t ptr = (ptrHi << 8) | ptrLo;
+            uint8_t lo = bus->cpuRead(ptr);
+            uint8_t hi = bus->cpuRead((ptr & 0xFF00) | ((ptr + 1) & 0x00FF)); // page bug
+            PC = (hi << 8) | lo;
+            break;
+        }
+
+        case 0x20: { // JSR
+            uint16_t lo = bus->cpuRead(PC++);
+            uint16_t hi = bus->cpuRead(PC++);
+            uint16_t target = (hi << 8) | lo;
+            uint16_t returnAddr = PC - 1;
+            bus->cpuWrite(0x0100 + SP--, (returnAddr >> 8) & 0xFF);
+            bus->cpuWrite(0x0100 + SP--, returnAddr & 0xFF);
+            PC = target;
+            break;
+        }
+
+        case 0x60: { // RTS
+            uint8_t lo = bus->cpuRead(0x0100 + ++SP);
+            uint8_t hi = bus->cpuRead(0x0100 + ++SP);
+            PC = ((hi << 8) | lo) + 1;
+            break;
+        }
+
         //
-        // --- Default ---
+        // --- Branches ---
         //
+        #define BRANCH(cond) { int8_t offset = bus->cpuRead(PC++); if (cond) PC += offset; }
+
+        case 0xF0: BRANCH(GetFlag(Z)); break; // BEQ
+        case 0xD0: BRANCH(!GetFlag(Z)); break; // BNE
+        case 0x10: BRANCH(!GetFlag(N)); break; // BPL
+        case 0x30: BRANCH(GetFlag(N)); break;  // BMI
+        case 0xB0: BRANCH(GetFlag(C)); break;  // BCS
+        case 0x90: BRANCH(!GetFlag(C)); break; // BCC
+        case 0x70: BRANCH(GetFlag(V)); break;  // BVS
+        case 0x50: BRANCH(!GetFlag(V)); break; // BVC
+
+        #undef BRANCH
+
+        //
+        // --- Compare ---
+        //
+        case 0xC9: { uint8_t val = bus->cpuRead(PC++); CMP(A, val); break; } // CMP #imm
+        case 0xE0: { uint8_t val = bus->cpuRead(PC++); CMP(X, val); break; } // CPX #imm
+        case 0xC0: { uint8_t val = bus->cpuRead(PC++); CMP(Y, val); break; } // CPY #imm
+
+        //
+        // --- Misc ---
+        //
+        case 0xEA: break; // NOP
+        case 0x00: SetFlag(B, true); std::cout << "BRK reached\n"; break;
 
         default:
             std::cerr << "Unknown opcode: 0x" << std::hex << (int)opcode << "\n";
             break;
     }
 }
+
+
 
 void CPU6502::Run(){
     while(1){
@@ -285,4 +272,12 @@ void CPU6502::Run(){
         }
         Clock();
     }
+}
+
+void CPU6502::NMI(){
+    uint16_t lo = bus->cpuRead(0xFFFA);
+    uint16_t hi = bus->cpuRead(0xFFFB);
+    PC = (hi << 8) | lo;
+
+    SetFlag(I, true);
 }

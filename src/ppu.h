@@ -35,6 +35,16 @@ public:
     std::array<uint8_t, 256> OAM{};
     void RenderSprites();
 
+    // PPU-CPU sync
+    int cycle = 0;      // 0 - 340
+    int scanline = 0;   // -1 - 261
+    int frame = 0;
+    bool nmiOccured = false;    // when VBLANK begins
+    bool nmiOutput = false;     // PPUCTRL bit 7
+    bool nmiPrev = false;       // edge detection
+    bool frameComplete = false;
+    void Clock();
+
 private:
     Bus* bus = nullptr;
 
@@ -54,4 +64,5 @@ private:
     bool addrLatch = false;     // PPUADDR/PPUSCROLL toggle
 
     uint8_t ppuDataBuffer = 0x00;
+
 };
