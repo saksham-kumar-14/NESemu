@@ -152,7 +152,7 @@ uint8_t PPU::cpuRead(uint16_t addr) {
             addrLatch = false;
             break;
         case 0x0004: // OAMDATA
-            data = 0x00; // stub for now
+            data = OAM[OAMADDR];
             break;
         case 0x0007: // PPUDATA
             data = ppuDataBuffer;
@@ -181,7 +181,7 @@ void PPU::cpuWrite(uint16_t addr, uint8_t data) {
             break;
 
         case 0x0004: // OAMDATA
-            // OAM[OAMADDR++] = data; // implement later
+            OAM[OAMADDR++] = data;
             break;
 
         case 0x0005: // PPUSCROLL
@@ -209,7 +209,7 @@ void PPU::cpuWrite(uint16_t addr, uint8_t data) {
 
         case 0x0007: // PPUDATA
             ppuWrite(vramAddr, data);
-            vramAddr += (PPUCTRL & 0x04) ? 32 : 1;
+            vramAddr += (PPUCTRL & 0x04) ? 32 : 1; // traversing x or y
             break;
     }
 }
@@ -272,4 +272,50 @@ void PPU::RenderNametable(uint16_t baseAddr){
 
     std::cout << "Rendered Nametable from $"
                   << std::hex << baseAddr << std::dec << "\n";
+}
+
+
+// Sprite palletes are at 0x3F10 - 0x3F1F
+void PPU::RenderSprites(){
+    auto &chr = bus->cart->CHRMemory;
+    const int bytesPerTile = 16;
+
+    for(int i = 0; i < 64; ++i){
+        uint8_t yPos = OAM[i * 4];
+        uint8_t titleIndex = OAM[i * 4 + 1];
+        uint8_t attr = OAM[i * 4 + 2];
+        uint8_t xPos = OAM[i * 4 + 3];
+
+        uint8_t palleteNo = attr & 0x03;
+        bool flipH = attr & 0x40;
+        bool flipV = attr & 0x80;
+
+        uint16_t patternBase = (PPUCTRL & 0x08) ? 0x1000 : 0x0000;
+        uint16_t chrAddr = patternBase + titleIndex * bytesPerTile;
+        uint16_t paletteBase = 0x3F10 + (palleteNo << 2);
+
+        for(int row = 0; row < 8; ++row){
+            uint8_t plane0 = chr[chrAddr + row];
+            uint8_t plane1 = chr[chrAddr + row + 8];
+
+            for(int col = 0; col < 8; ++col){
+                int py = flipV ? (7 - row) : row;
+                int px = flipH ? (7 - col) : col;
+
+                uint8_t lsbit = (plane0 >> (7 - col)) & 1;
+                uint8_t msbit = (plane1 >> (7 - col)) & 1;
+                uint8_t pixel = (msbit << 1) | lsbit;
+                if(pixel == 0) continue;
+
+                uint8_t colorIndex = ppuRead(paletteBase + pixel);
+                uint32_t color = NESColor(colorIndex);
+
+                int x = xPos + px;
+                int y = yPos + py;
+                if (x < SCREEN_WIDTH && y < SCREEN_HEIGHT){
+                    framebuffer[y * SCREEN_WIDTH + x] = color;
+                }
+            }
+        }
+    }
 }

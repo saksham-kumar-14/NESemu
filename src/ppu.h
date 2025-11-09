@@ -32,6 +32,9 @@ public:
 
     void RenderNametable(uint16_t baseAddr);
 
+    std::array<uint8_t, 256> OAM{};
+    void RenderSprites();
+
 private:
     Bus* bus = nullptr;
 

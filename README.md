@@ -10,10 +10,10 @@ NES emulator in c++
 - [ ] PPU
   - [x] CHR ROM
   - [x] NES color palette system
-  - [ ] PPU registers
-  - [ ] Nametables
-  - [ ] VBlank
-  - [ ] OAM rendering
+  - [x] PPU registers
+  - [x] Nametables
+  - [x] VBlank
+  - [x] OAM rendering
 - [ ] Mapper
 - [ ] Controller
 - [ ] Timer
