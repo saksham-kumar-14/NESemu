@@ -1,14 +1,15 @@
 #include "../src/bus.h"
 #include <iostream>
 #include <cassert>
+#include <vector>
 
 int main() {
     Bus bus;
 
+    // program: LDA #$42, INX, BRK
     std::vector<uint8_t> program = { 0xA9, 0x42, 0xE8, 0x00 };
 
-    bus.cpu.LoadProgram(program, 0x8000);
-
+    bus.cpu.LoadProgram(program, 0x0000);
     bus.cpu.Reset();
 
     std::cout << "Starting CPU Run...\n";
