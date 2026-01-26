@@ -17,12 +17,12 @@ void CPU6502::Reset(){
     A = 0;
     X = 0;
     Y = 0;
-    SP = 0xFD;
+    SP = 0xFD;      // The stack lives in memory page 1 (`0x0100` - `0x01FF`).
     P = 0x24;
 
     uint16_t lo = bus->cpuRead(0xFFFC);
     uint16_t hi = bus->cpuRead(0xFFFD);
-    PC = (hi << 8) | lo;
+    PC = (hi << 8) | lo;    // Little endian
 }
 
 void CPU6502::LoadProgram(const std::vector<uint8_t>& program, uint16_t startAddr){
@@ -46,7 +46,7 @@ bool CPU6502::GetFlag(uint8_t bit){
 
 void CPU6502::Clock(){
     uint8_t opcode = bus->cpuRead(PC++);
-    std::cout << std::hex << "PC=" << PC << " OPCODE=" << (int)opcode << "\n";
+    // std::cout << std::hex << "PC=" << PC << " OPCODE=" << (int)opcode << "\n";
     Execute(opcode);
 }
 
