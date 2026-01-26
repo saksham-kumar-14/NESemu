@@ -1,4 +1,5 @@
 #include "../src/cpu.h"
+#include "../src/bus.h"
 #include <cstdint>
 #include <sys/types.h>
 
@@ -6,7 +7,7 @@ int main(){
     Bus bus;
 
     std::vector<uint8_t> program = {
-        0xA9, 0x05, // LDA #$05
+        0xA9, 0x05, // LDA
         0xE8,       // INX
         0xE8,       // INX
         0x00        // BRK
@@ -16,8 +17,8 @@ int main(){
     bus.cpu.Reset();
     bus.cpu.Run();
 
-    std::cout << "A = " << (int)bus.cpu.A << "\n";
-    std::cout << "X = " << (int)bus.cpu.X << "\n";
+    std::cout << "A = " << (int)bus.cpu.A << "\n";  // 5
+    std::cout << "X = " << (int)bus.cpu.X << "\n";  // 2
     return 0;
 }
 
