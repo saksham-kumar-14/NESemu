@@ -5,7 +5,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 find_package(SDL2 REQUIRED)
 
 set(SOURCES
-    tests/cartridge.cpp
+    tests/cpu.cpp
     src/cartridge.cpp
     src/bus.cpp
     src/cpu.cpp

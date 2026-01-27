@@ -70,6 +70,8 @@ Does all the memory management like MMU.
 	- `SP (Stack Pointer)`: Points at a temporary area (stack) for function execution and stuff
 	- `PC (Program Counter)`: Points to the memory address of the next instruction to be executed. It from from `0x0000` to `0xFFFF`
 	- `P (Status Register)` : A collection of single 8 bit flags (Zero, carry, negative) that tells the CPU of the last instruction
+	- `cycles` : Cycles for the current instruction. If cycles is 0 then only next instruction can be executed otherwise hell nah.
+	- `total_cycles` : for debugging purposes 
 	- *Note that only PC is `uint16_t`, others are `uint8_t`*
 - `Reset()`: 
 ```c++
@@ -97,6 +99,8 @@ Does all the memory management like MMU.
 		P &= ~bit; // Turn OFF
 	}	
 ```
+
+# 
 
 # Tests
 

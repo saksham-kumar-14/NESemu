@@ -1,6 +1,6 @@
 #include "cpu.h"
 #include <cstdint>
-#include<iostream>
+#include <iostream>
 #include <sys/types.h>
 #include "bus.h"
 
@@ -23,7 +23,7 @@ void CPU6502::Reset(){
     A = 0;
     X = 0;
     Y = 0;
-    SP = 0xFD;      // The stack lives in memory page 1 (`0x0100` - `0x01FF`).
+    SP = 0xFD;      // The stack lives in memory page 1 (`0x0100` - `0x01FF`).
     P = 0x24;
 
     uint16_t lo = bus->cpuRead(0xFFFC);
@@ -51,12 +51,17 @@ bool CPU6502::GetFlag(uint8_t bit){
 }
 
 void CPU6502::Clock(){
-    uint8_t opcode = bus->cpuRead(PC++);
-    // std::cout << std::hex << "PC=" << PC << " OPCODE=" << (int)opcode << "\n";
-    Execute(opcode);
+    // if cycle is 0 => previous instruction is finished
+    if(cycles == 0){
+        uint8_t opcode = bus->cpuRead(PC++);
+        cycles = Execute(opcode);
+    }
+    --cycles;
+    ++total_cycles;
 }
 
-void CPU6502::Execute(uint8_t opcode){
+// Returns the CPU cycles it will take to run
+uint8_t CPU6502::Execute(uint8_t opcode){
 
     // addressing mode helper functions
     auto READ_PC_8 = [&](){
@@ -68,24 +73,23 @@ void CPU6502::Execute(uint8_t opcode){
         return (uint16_t)((hi << 8) | lo);
     };
 
-    auto ADDR_IMM  = [&]() { return PC++; }; // Immediate: Data at PC
+    auto ADDR_IMM   = [&]() { return PC++; }; // Immediate: Data at PC
     // zero page modes
-    auto ADDR_ZP   = [&]() { return (uint16_t)READ_PC_8(); };   //
-    auto ADDR_ZPX  = [&]() { return (uint16_t)((READ_PC_8() + X) & 0xFF); };
-    auto ADDR_ZPY  = [&]() { return (uint16_t)((READ_PC_8() + Y) & 0xFF); };
+    auto ADDR_ZP    = [&]() { return (uint16_t)READ_PC_8(); };   //
+    auto ADDR_ZPX   = [&]() { return (uint16_t)((READ_PC_8() + X) & 0xFF); };
+    auto ADDR_ZPY   = [&]() { return (uint16_t)((READ_PC_8() + Y) & 0xFF); };
     // absolute modes
-    auto ADDR_ABS  = [&]() { return READ_PC_16(); };
-    auto ADDR_ABSX = [&]() { return (uint16_t)(READ_PC_16() + X); };
-    auto ADDR_ABSY = [&]() { return (uint16_t)(READ_PC_16() + Y); };
+    auto ADDR_ABS   = [&]() { return READ_PC_16(); };
+    auto ADDR_ABSX  = [&]() { return (uint16_t)(READ_PC_16() + X); };
+    auto ADDR_ABSY  = [&]() { return (uint16_t)(READ_PC_16() + Y); };
     // Indexed Indirect
-    // from a list of pointers in zero page, x selects which pointers to use
     auto ADDR_INDX = [&]() {
         uint8_t ptr = (READ_PC_8() + X) & 0xFF;
         uint16_t lo = bus->cpuRead(ptr);
         uint16_t hi = bus->cpuRead((ptr + 1) & 0xFF);
         return (uint16_t)((hi << 8) | lo);
     };
-    // from a list of pointers in zero page, y selects which pointers to use
+    // Indirect Indexed
     auto ADDR_INDY = [&]() {
         uint8_t ptr = READ_PC_8();
         uint16_t lo = bus->cpuRead(ptr);
@@ -99,18 +103,15 @@ void CPU6502::Execute(uint8_t opcode){
         SetFlag(N, res & 0x80);
     };
 
-    // Load Register
     auto OP_LD = [&](uint8_t &reg, uint16_t addr){
         reg = bus->cpuRead(addr);
         UPDATE_ZN(reg);
     };
 
-    // Store Register
     auto OP_ST = [&](uint8_t&reg, uint16_t addr){
         bus->cpuWrite(addr, reg);
     };
 
-    // Arithmetic (ADC)
     auto OP_ADC = [&](uint16_t addr){
         uint8_t val = bus->cpuRead(addr);
         uint16_t sum = A + val + GetFlag(C);
@@ -121,7 +122,6 @@ void CPU6502::Execute(uint8_t opcode){
         A = sum & 0xFF;
     };
 
-    // Substracction - doing ADC only with inverted values
     auto OP_SBC = [&](uint16_t addr){
         uint8_t tval = bus->cpuRead(addr);
         uint16_t val = tval ^ 0xFF;
@@ -146,7 +146,6 @@ void CPU6502::Execute(uint8_t opcode){
         UPDATE_ZN(A);
     };
 
-    // Compare
     auto OP_CMP = [&](uint8_t reg, uint16_t addr){
         uint8_t val = bus->cpuRead(addr);
         SetFlag(C, reg >= val);
@@ -154,7 +153,6 @@ void CPU6502::Execute(uint8_t opcode){
         SetFlag(N, (reg - val) & 0x80);
     };
 
-    // Memory Increment/Decrement
     auto OP_MEM_MOD = [&](uint16_t addr, int change){
         uint8_t val = bus->cpuRead(addr);
         val += change;
@@ -162,8 +160,6 @@ void CPU6502::Execute(uint8_t opcode){
         UPDATE_ZN(val);
     };
 
-    // Shifts: ASL, LSR, ROL, ROR
-    // modeAcc: true operates on A, false operates on Memory
     auto OP_ASL = [&](uint16_t addr, bool modeAcc) {
         uint8_t val = modeAcc ? A : bus->cpuRead(addr);
         SetFlag(C, val & 0x80);
@@ -200,7 +196,14 @@ void CPU6502::Execute(uint8_t opcode){
 
     auto OP_BRANCH = [&](bool condition) {
         int8_t offset = (int8_t)READ_PC_8();
-        if (condition) PC += offset;
+        uint8_t cycles_taken = 2;
+        if (condition) {
+            cycles_taken++;
+            uint16_t target = PC + offset;
+            if ((target & 0xFF00) != (PC & 0xFF00)) cycles_taken++; // page crossed
+            PC = target;
+        }
+        return cycles_taken;
     };
 
     auto PUSH = [&](uint8_t val){
@@ -210,203 +213,319 @@ void CPU6502::Execute(uint8_t opcode){
         return bus->cpuRead(0x0100 + ++SP);
     };
 
-    // std::cout << "OP: " << std::hex << (int)opcode << "\n";
+    auto PAGE_CROSS = [](uint16_t a, uint16_t b) {  // check for page boundary crossing
+        return (a & 0xFF00) != (b & 0xFF00);
+    };
+
     switch(opcode) {
 
         // NOP
-        case 0xEA: break;
+        case 0xEA: return 2;
 
         // LOAD (LDA, LDX, LDY)
-        case 0xA9: OP_LD(A, ADDR_IMM());  break;
-        case 0xA5: OP_LD(A, ADDR_ZP());   break;
-        case 0xB5: OP_LD(A, ADDR_ZPX());  break;
-        case 0xAD: OP_LD(A, ADDR_ABS());  break;
-        case 0xBD: OP_LD(A, ADDR_ABSX()); break;
-        case 0xB9: OP_LD(A, ADDR_ABSY()); break;
-        case 0xA1: OP_LD(A, ADDR_INDX()); break;
-        case 0xB1: OP_LD(A, ADDR_INDY()); break;
+        case 0xA9: OP_LD(A, ADDR_IMM());  return 2;
+        case 0xA5: OP_LD(A, ADDR_ZP());   return 3;
+        case 0xB5: OP_LD(A, ADDR_ZPX());  return 4;
+        case 0xAD: OP_LD(A, ADDR_ABS());  return 4;
+        case 0xBD: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X; OP_LD(A, target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0xB9: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y; OP_LD(A, target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0xA1: OP_LD(A, ADDR_INDX()); return 6;
+        case 0xB1: {
+            uint8_t ptr = READ_PC_8();
+            uint16_t base = bus->cpuRead(ptr) | (bus->cpuRead((ptr + 1) & 0xFF) << 8);
+            uint16_t target = base + Y; OP_LD(A, target);
+            return 5 + PAGE_CROSS(base, target);
+        }
 
-        case 0xA2: OP_LD(X, ADDR_IMM());  break;
-        case 0xA6: OP_LD(X, ADDR_ZP());   break;
-        case 0xB6: OP_LD(X, ADDR_ZPY());  break; // ZP, Y
-        case 0xAE: OP_LD(X, ADDR_ABS());  break;
-        case 0xBE: OP_LD(X, ADDR_ABSY()); break; // Abs, Y
+        case 0xA2: OP_LD(X, ADDR_IMM());  return 2;
+        case 0xA6: OP_LD(X, ADDR_ZP());   return 3;
+        case 0xB6: OP_LD(X, ADDR_ZPY());  return 4;
+        case 0xAE: OP_LD(X, ADDR_ABS());  return 4;
+        case 0xBE: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y; OP_LD(X, target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
 
-        case 0xA0: OP_LD(Y, ADDR_IMM());  break;
-        case 0xA4: OP_LD(Y, ADDR_ZP());   break;
-        case 0xB4: OP_LD(Y, ADDR_ZPX());  break; // ZP, X
-        case 0xAC: OP_LD(Y, ADDR_ABS());  break;
-        case 0xBC: OP_LD(Y, ADDR_ABSX()); break; // Abs, X
+        case 0xA0: OP_LD(Y, ADDR_IMM());  return 2;
+        case 0xA4: OP_LD(Y, ADDR_ZP());   return 3;
+        case 0xB4: OP_LD(Y, ADDR_ZPX());  return 4;
+        case 0xAC: OP_LD(Y, ADDR_ABS());  return 4;
+        case 0xBC: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X; OP_LD(Y, target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
 
         // STORE (STA, STX, STY)
-        case 0x85: OP_ST(A, ADDR_ZP());   break;
-        case 0x95: OP_ST(A, ADDR_ZPX());  break;
-        case 0x8D: OP_ST(A, ADDR_ABS());  break;
-        case 0x9D: OP_ST(A, ADDR_ABSX()); break;
-        case 0x99: OP_ST(A, ADDR_ABSY()); break;
-        case 0x81: OP_ST(A, ADDR_INDX()); break;
-        case 0x91: OP_ST(A, ADDR_INDY()); break;
+        case 0x85: OP_ST(A, ADDR_ZP());   return 3;
+        case 0x95: OP_ST(A, ADDR_ZPX());  return 4;
+        case 0x8D: OP_ST(A, ADDR_ABS());  return 4;
+        case 0x9D: OP_ST(A, ADDR_ABSX()); return 5;
+        case 0x99: OP_ST(A, ADDR_ABSY()); return 5;
+        case 0x81: OP_ST(A, ADDR_INDX()); return 6;
+        case 0x91: OP_ST(A, ADDR_INDY()); return 6;
 
-        case 0x86: OP_ST(X, ADDR_ZP());   break;
-        case 0x96: OP_ST(X, ADDR_ZPY());  break;
-        case 0x8E: OP_ST(X, ADDR_ABS());  break;
+        case 0x86: OP_ST(X, ADDR_ZP());   return 3;
+        case 0x96: OP_ST(X, ADDR_ZPY());  return 4;
+        case 0x8E: OP_ST(X, ADDR_ABS());  return 4;
 
-        case 0x84: OP_ST(Y, ADDR_ZP());   break;
-        case 0x94: OP_ST(Y, ADDR_ZPX());  break;
-        case 0x8C: OP_ST(Y, ADDR_ABS());  break;
+        case 0x84: OP_ST(Y, ADDR_ZP());   return 3;
+        case 0x94: OP_ST(Y, ADDR_ZPX());  return 4;
+        case 0x8C: OP_ST(Y, ADDR_ABS());  return 4;
 
         // TRANSFERS
-        case 0xAA: X = A; UPDATE_ZN(X); break; // TAX
-        case 0xA8: Y = A; UPDATE_ZN(Y); break; // TAY
-        case 0x8A: A = X; UPDATE_ZN(A); break; // TXA
-        case 0x98: A = Y; UPDATE_ZN(A); break; // TYA
-        case 0x9A: SP = X; break;              // TXS
-        case 0xBA: X = SP; UPDATE_ZN(X); break;// TSX
+        case 0xAA: X = A; UPDATE_ZN(X); return 2;
+        case 0xA8: Y = A; UPDATE_ZN(Y); return 2;
+        case 0x8A: A = X; UPDATE_ZN(A); return 2;
+        case 0x98: A = Y; UPDATE_ZN(A); return 2;
+        case 0x9A: SP = X;              return 2;
+        case 0xBA: X = SP; UPDATE_ZN(X);return 2;
 
         // ARITHMETIC (ADC / SBC)
-        case 0x69: OP_ADC(ADDR_IMM());  break;
-        case 0x65: OP_ADC(ADDR_ZP());   break;
-        case 0x75: OP_ADC(ADDR_ZPX());  break;
-        case 0x6D: OP_ADC(ADDR_ABS());  break;
-        case 0x7D: OP_ADC(ADDR_ABSX()); break;
-        case 0x79: OP_ADC(ADDR_ABSY()); break;
-        case 0x61: OP_ADC(ADDR_INDX()); break;
-        case 0x71: OP_ADC(ADDR_INDY()); break;
+        case 0x69: OP_ADC(ADDR_IMM());  return 2;
+        case 0x65: OP_ADC(ADDR_ZP());   return 3;
+        case 0x75: OP_ADC(ADDR_ZPX());  return 4;
+        case 0x6D: OP_ADC(ADDR_ABS());  return 4;
+        case 0x7D: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X; OP_ADC(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x79: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y;
+            OP_ADC(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x61: OP_ADC(ADDR_INDX()); return 6;
+        case 0x71: {
+            uint8_t ptr = READ_PC_8();
+            uint16_t base = bus->cpuRead(ptr) | (bus->cpuRead((ptr + 1) & 0xFF) << 8);
+            uint16_t target = base + Y;
+            OP_ADC(target);
+            return 5 + PAGE_CROSS(base, target);
+        }
 
-        case 0xE9: OP_SBC(ADDR_IMM());  break;
-        case 0xE5: OP_SBC(ADDR_ZP());   break;
-        case 0xF5: OP_SBC(ADDR_ZPX());  break;
-        case 0xED: OP_SBC(ADDR_ABS());  break;
-        case 0xFD: OP_SBC(ADDR_ABSX()); break;
-        case 0xF9: OP_SBC(ADDR_ABSY()); break;
-        case 0xE1: OP_SBC(ADDR_INDX()); break;
-        case 0xF1: OP_SBC(ADDR_INDY()); break;
+        case 0xE9: OP_SBC(ADDR_IMM());  return 2;
+        case 0xE5: OP_SBC(ADDR_ZP());   return 3;
+        case 0xF5: OP_SBC(ADDR_ZPX());  return 4;
+        case 0xED: OP_SBC(ADDR_ABS());  return 4;
+        case 0xFD: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X; OP_SBC(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0xF9: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y; OP_SBC(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0xE1: OP_SBC(ADDR_INDX()); return 6;
+        case 0xF1: {
+            uint8_t ptr = READ_PC_8();
+            uint16_t base = bus->cpuRead(ptr) | (bus->cpuRead((ptr + 1) & 0xFF) << 8);
+            uint16_t target = base + Y;
+            OP_SBC(target);
+            return 5 + PAGE_CROSS(base, target);
+        }
 
         // LOGICAL (AND, ORA, EOR, BIT)
-        case 0x29: OP_AND(ADDR_IMM());  break;
-        case 0x25: OP_AND(ADDR_ZP());   break;
-        case 0x35: OP_AND(ADDR_ZPX());  break;
-        case 0x2D: OP_AND(ADDR_ABS());  break;
-        case 0x3D: OP_AND(ADDR_ABSX()); break;
-        case 0x39: OP_AND(ADDR_ABSY()); break;
-        case 0x21: OP_AND(ADDR_INDX()); break;
-        case 0x31: OP_AND(ADDR_INDY()); break;
+        case 0x29: OP_AND(ADDR_IMM());  return 2;
+        case 0x25: OP_AND(ADDR_ZP());   return 3;
+        case 0x35: OP_AND(ADDR_ZPX());  return 4;
+        case 0x2D: OP_AND(ADDR_ABS());  return 4;
+        case 0x3D: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X;
+            OP_AND(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x39: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y;
+            OP_AND(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x21: OP_AND(ADDR_INDX()); return 6;
+        case 0x31: {
+            uint8_t ptr = READ_PC_8();
+            uint16_t base = bus->cpuRead(ptr) | (bus->cpuRead((ptr + 1) & 0xFF) << 8);
+            uint16_t target = base + Y;
+            OP_AND(target);
+            return 5 + PAGE_CROSS(base, target);
+        }
 
-        case 0x09: OP_ORA(ADDR_IMM());  break;
-        case 0x05: OP_ORA(ADDR_ZP());   break;
-        case 0x15: OP_ORA(ADDR_ZPX());  break;
-        case 0x0D: OP_ORA(ADDR_ABS());  break;
-        case 0x1D: OP_ORA(ADDR_ABSX()); break;
-        case 0x19: OP_ORA(ADDR_ABSY()); break;
-        case 0x01: OP_ORA(ADDR_INDX()); break;
-        case 0x11: OP_ORA(ADDR_INDY()); break;
+        case 0x09: OP_ORA(ADDR_IMM());  return 2;
+        case 0x05: OP_ORA(ADDR_ZP());   return 3;
+        case 0x15: OP_ORA(ADDR_ZPX());  return 4;
+        case 0x0D: OP_ORA(ADDR_ABS());  return 4;
+        case 0x1D: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X;
+            OP_ORA(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x19: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y;
+            OP_ORA(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x01: OP_ORA(ADDR_INDX()); return 6;
+        case 0x11: {
+            uint8_t ptr = READ_PC_8();
+            uint16_t base = bus->cpuRead(ptr) | (bus->cpuRead((ptr + 1) & 0xFF) << 8);
+            uint16_t target = base + Y;
+            OP_ORA(target);
+            return 5 + PAGE_CROSS(base, target);
+        }
 
-        case 0x49: OP_EOR(ADDR_IMM());  break;
-        case 0x45: OP_EOR(ADDR_ZP());   break;
-        case 0x55: OP_EOR(ADDR_ZPX());  break;
-        case 0x4D: OP_EOR(ADDR_ABS());  break;
-        case 0x5D: OP_EOR(ADDR_ABSX()); break;
-        case 0x59: OP_EOR(ADDR_ABSY()); break;
-        case 0x41: OP_EOR(ADDR_INDX()); break;
-        case 0x51: OP_EOR(ADDR_INDY()); break;
+        case 0x49: OP_EOR(ADDR_IMM());  return 2;
+        case 0x45: OP_EOR(ADDR_ZP());   return 3;
+        case 0x55: OP_EOR(ADDR_ZPX());  return 4;
+        case 0x4D: OP_EOR(ADDR_ABS());  return 4;
+        case 0x5D: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X;
+            OP_EOR(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x59: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y;
+            OP_EOR(target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0x41: OP_EOR(ADDR_INDX()); return 6;
+        case 0x51: {
+            uint8_t ptr = READ_PC_8();
+            uint16_t base = bus->cpuRead(ptr) | (bus->cpuRead((ptr + 1) & 0xFF) << 8);
+            uint16_t target = base + Y;
+            OP_EOR(target);
+            return 5 + PAGE_CROSS(base, target);
+        }
 
         case 0x24: { // BIT ZP
             uint8_t val = bus->cpuRead(ADDR_ZP());
             SetFlag(Z, (A & val) == 0); SetFlag(N, val & 0x80); SetFlag(V, val & 0x40);
-            break;
+            return 3;
         }
         case 0x2C: { // BIT ABS
             uint8_t val = bus->cpuRead(ADDR_ABS());
             SetFlag(Z, (A & val) == 0); SetFlag(N, val & 0x80); SetFlag(V, val & 0x40);
-            break;
+            return 4;
         }
 
         // INC / DEC
-        case 0xE6: OP_MEM_MOD(ADDR_ZP(), 1);   break;
-        case 0xF6: OP_MEM_MOD(ADDR_ZPX(), 1);  break;
-        case 0xEE: OP_MEM_MOD(ADDR_ABS(), 1);  break;
-        case 0xFE: OP_MEM_MOD(ADDR_ABSX(), 1); break;
-        case 0xC6: OP_MEM_MOD(ADDR_ZP(), -1);  break;
-        case 0xD6: OP_MEM_MOD(ADDR_ZPX(), -1); break;
-        case 0xCE: OP_MEM_MOD(ADDR_ABS(), -1); break;
-        case 0xDE: OP_MEM_MOD(ADDR_ABSX(), -1);break;
+        case 0xE6: OP_MEM_MOD(ADDR_ZP(), 1);   return 5;
+        case 0xF6: OP_MEM_MOD(ADDR_ZPX(), 1);  return 6;
+        case 0xEE: OP_MEM_MOD(ADDR_ABS(), 1);  return 6;
+        case 0xFE: OP_MEM_MOD(ADDR_ABSX(), 1); return 7;
+        case 0xC6: OP_MEM_MOD(ADDR_ZP(), -1);  return 5;
+        case 0xD6: OP_MEM_MOD(ADDR_ZPX(), -1); return 6;
+        case 0xCE: OP_MEM_MOD(ADDR_ABS(), -1); return 6;
+        case 0xDE: OP_MEM_MOD(ADDR_ABSX(), -1);return 7;
 
-        case 0xE8: X++; UPDATE_ZN(X); break; // INX
-        case 0xC8: Y++; UPDATE_ZN(Y); break; // INY
-        case 0xCA: X--; UPDATE_ZN(X); break; // DEX
-        case 0x88: Y--; UPDATE_ZN(Y); break; // DEY
+        case 0xE8: X++; UPDATE_ZN(X); return 2;
+        case 0xC8: Y++; UPDATE_ZN(Y); return 2;
+        case 0xCA: X--; UPDATE_ZN(X); return 2;
+        case 0x88: Y--; UPDATE_ZN(Y); return 2;
 
         // SHIFTS (ASL, LSR, ROL, ROR)
-        case 0x0A: OP_ASL(0, true);       break; // A
-        case 0x06: OP_ASL(ADDR_ZP(), false);   break;
-        case 0x16: OP_ASL(ADDR_ZPX(), false);  break;
-        case 0x0E: OP_ASL(ADDR_ABS(), false);  break;
-        case 0x1E: OP_ASL(ADDR_ABSX(), false); break;
+        case 0x0A: OP_ASL(0, true);        return 2;
+        case 0x06: OP_ASL(ADDR_ZP(), false);   return 5;
+        case 0x16: OP_ASL(ADDR_ZPX(), false);  return 6;
+        case 0x0E: OP_ASL(ADDR_ABS(), false);  return 6;
+        case 0x1E: OP_ASL(ADDR_ABSX(), false); return 7;
 
-        case 0x4A: OP_LSR(0, true);       break; // A
-        case 0x46: OP_LSR(ADDR_ZP(), false);   break;
-        case 0x56: OP_LSR(ADDR_ZPX(), false);  break;
-        case 0x4E: OP_LSR(ADDR_ABS(), false);  break;
-        case 0x5E: OP_LSR(ADDR_ABSX(), false); break;
+        case 0x4A: OP_LSR(0, true);        return 2;
+        case 0x46: OP_LSR(ADDR_ZP(), false);   return 5;
+        case 0x56: OP_LSR(ADDR_ZPX(), false);  return 6;
+        case 0x4E: OP_LSR(ADDR_ABS(), false);  return 6;
+        case 0x5E: OP_LSR(ADDR_ABSX(), false); return 7;
 
-        case 0x2A: OP_ROL(0, true);       break; // A
-        case 0x26: OP_ROL(ADDR_ZP(), false);   break;
-        case 0x36: OP_ROL(ADDR_ZPX(), false);  break;
-        case 0x2E: OP_ROL(ADDR_ABS(), false);  break;
-        case 0x3E: OP_ROL(ADDR_ABSX(), false); break;
+        case 0x2A: OP_ROL(0, true);        return 2;
+        case 0x26: OP_ROL(ADDR_ZP(), false);   return 5;
+        case 0x36: OP_ROL(ADDR_ZPX(), false);  return 6;
+        case 0x2E: OP_ROL(ADDR_ABS(), false);  return 6;
+        case 0x3E: OP_ROL(ADDR_ABSX(), false); return 7;
 
-        case 0x6A: OP_ROR(0, true);       break; // A
-        case 0x66: OP_ROR(ADDR_ZP(), false);   break;
-        case 0x76: OP_ROR(ADDR_ZPX(), false);  break;
-        case 0x6E: OP_ROR(ADDR_ABS(), false);  break;
-        case 0x7E: OP_ROR(ADDR_ABSX(), false); break;
+        case 0x6A: OP_ROR(0, true);        return 2;
+        case 0x66: OP_ROR(ADDR_ZP(), false);   return 5;
+        case 0x76: OP_ROR(ADDR_ZPX(), false);  return 6;
+        case 0x6E: OP_ROR(ADDR_ABS(), false);  return 6;
+        case 0x7E: OP_ROR(ADDR_ABSX(), false); return 7;
 
         // COMPARE (CMP, CPX, CPY)
-        case 0xC9: OP_CMP(A, ADDR_IMM());  break;
-        case 0xC5: OP_CMP(A, ADDR_ZP());   break;
-        case 0xD5: OP_CMP(A, ADDR_ZPX());  break;
-        case 0xCD: OP_CMP(A, ADDR_ABS());  break;
-        case 0xDD: OP_CMP(A, ADDR_ABSX()); break;
-        case 0xD9: OP_CMP(A, ADDR_ABSY()); break;
-        case 0xC1: OP_CMP(A, ADDR_INDX()); break;
-        case 0xD1: OP_CMP(A, ADDR_INDY()); break;
+        case 0xC9: OP_CMP(A, ADDR_IMM());  return 2;
+        case 0xC5: OP_CMP(A, ADDR_ZP());   return 3;
+        case 0xD5: OP_CMP(A, ADDR_ZPX());  return 4;
+        case 0xCD: OP_CMP(A, ADDR_ABS());  return 4;
+        case 0xDD: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + X;
+            OP_CMP(A, target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0xD9: {
+            uint16_t addr = ADDR_ABS();
+            uint16_t target = addr + Y;
+            OP_CMP(A, target);
+            return 4 + PAGE_CROSS(addr, target);
+        }
+        case 0xC1: OP_CMP(A, ADDR_INDX()); return 6;
+        case 0xD1: {
+            uint8_t ptr = READ_PC_8();
+            uint16_t base = bus->cpuRead(ptr) | (bus->cpuRead((ptr + 1) & 0xFF) << 8);
+            uint16_t target = base + Y;
+            OP_CMP(A, target);
+            return 5 + PAGE_CROSS(base, target);
+        }
 
-        case 0xE0: OP_CMP(X, ADDR_IMM()); break;
-        case 0xE4: OP_CMP(X, ADDR_ZP());  break;
-        case 0xEC: OP_CMP(X, ADDR_ABS()); break;
+        case 0xE0: OP_CMP(X, ADDR_IMM()); return 2;
+        case 0xE4: OP_CMP(X, ADDR_ZP());  return 3;
+        case 0xEC: OP_CMP(X, ADDR_ABS()); return 4;
 
-        case 0xC0: OP_CMP(Y, ADDR_IMM()); break;
-        case 0xC4: OP_CMP(Y, ADDR_ZP());  break;
-        case 0xCC: OP_CMP(Y, ADDR_ABS()); break;
+        case 0xC0: OP_CMP(Y, ADDR_IMM()); return 2;
+        case 0xC4: OP_CMP(Y, ADDR_ZP());  return 3;
+        case 0xCC: OP_CMP(Y, ADDR_ABS()); return 4;
 
         // BRANCHES
-        case 0x90: OP_BRANCH(!GetFlag(C)); break; // BCC
-        case 0xB0: OP_BRANCH(GetFlag(C));  break; // BCS
-        case 0xF0: OP_BRANCH(GetFlag(Z));  break; // BEQ
-        case 0xD0: OP_BRANCH(!GetFlag(Z)); break; // BNE
-        case 0x30: OP_BRANCH(GetFlag(N));  break; // BMI
-        case 0x10: OP_BRANCH(!GetFlag(N)); break; // BPL
-        case 0x50: OP_BRANCH(!GetFlag(V)); break; // BVC
-        case 0x70: OP_BRANCH(GetFlag(V));  break; // BVS
+        case 0x90: return OP_BRANCH(!GetFlag(C));
+        case 0xB0: return OP_BRANCH(GetFlag(C));
+        case 0xF0: return OP_BRANCH(GetFlag(Z));
+        case 0xD0: return OP_BRANCH(!GetFlag(Z));
+        case 0x30: return OP_BRANCH(GetFlag(N));
+        case 0x10: return OP_BRANCH(!GetFlag(N));
+        case 0x50: return OP_BRANCH(!GetFlag(V));
+        case 0x70: return OP_BRANCH(GetFlag(V));
 
         // STACK
-        case 0x48: PUSH(A); break; // PHA
-        case 0x08: PUSH(P | 0x30); break; // PHP (Set Break + Unused)
-        case 0x68: A = PULL(); UPDATE_ZN(A); break; // PLA
-        case 0x28: P = PULL(); P |= U; break; // PLP (Ignore U bit)
+        case 0x48: PUSH(A); return 3;
+        case 0x08: PUSH(P | 0x30); return 3;
+        case 0x68: A = PULL(); UPDATE_ZN(A); return 4;
+        case 0x28: P = PULL(); P |= U; return 4;
 
         // JUMPS & SUBROUTINES
         case 0x4C: { // JMP ABS
             PC = ADDR_ABS();
-            break;
+            return 3;
         }
         case 0x6C: { // JMP INDIRECT (Buggy on 6502)
             uint16_t ptr = ADDR_ABS();
             uint16_t lo = bus->cpuRead(ptr);
-            // 6502 Hardware Bug: if ptr is XXFF, we wrap to XX00 not (XX+1)00
             uint16_t hi = bus->cpuRead((ptr & 0xFF00) | ((ptr + 1) & 0x00FF));
             PC = (hi << 8) | lo;
-            break;
+            return 5;
         }
         case 0x20: { // JSR
             uint16_t target = ADDR_ABS();
@@ -414,30 +533,30 @@ void CPU6502::Execute(uint8_t opcode){
             PUSH((ret >> 8) & 0xFF);
             PUSH(ret & 0xFF);
             PC = target;
-            break;
+            return 6;
         }
         case 0x60: { // RTS
             uint16_t lo = PULL();
             uint16_t hi = PULL();
             PC = ((hi << 8) | lo) + 1;
-            break;
+            return 6;
         }
         case 0x40: { // RTI
             P = PULL(); P |= U;
             uint16_t lo = PULL();
             uint16_t hi = PULL();
             PC = (hi << 8) | lo;
-            break;
+            return 6;
         }
 
         // FLAGS & SYSTEM
-        case 0x18: SetFlag(C, false); break; // CLC
-        case 0x38: SetFlag(C, true);  break; // SEC
-        case 0x58: SetFlag(I, false); break; // CLI
-        case 0x78: SetFlag(I, true);  break; // SEI
-        case 0xB8: SetFlag(V, false); break; // CLV
-        case 0xD8: SetFlag(D, false); break; // CLD
-        case 0xF8: SetFlag(D, true);  break; // SED
+        case 0x18: SetFlag(C, false); return 2;
+        case 0x38: SetFlag(C, true);  return 2;
+        case 0x58: SetFlag(I, false); return 2;
+        case 0x78: SetFlag(I, true);  return 2;
+        case 0xB8: SetFlag(V, false); return 2;
+        case 0xD8: SetFlag(D, false); return 2;
+        case 0xF8: SetFlag(D, true);  return 2;
 
         // break
         case 0x00: {
@@ -445,17 +564,17 @@ void CPU6502::Execute(uint8_t opcode){
             PUSH((PC >> 8) & 0xFF);
             PUSH(PC & 0xFF);
             PUSH(P | B | U);
-            SetFlag(B, true);
+            SetFlag(I, true); // BRK sets Interrupt disable
             uint16_t lo = bus->cpuRead(0xFFFE);
             uint16_t hi = bus->cpuRead(0xFFFF);
             PC = (hi << 8) | lo;
             std::cout << "BRK reached\n";
-            break;
+            return 7;
         }
 
         default:
             std::cerr << "Unknown opcode\n";
-            break;
+            return 2;
     }
 }
 

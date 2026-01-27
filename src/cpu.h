@@ -26,8 +26,13 @@ public:
     }
 
     bool GetFlag(uint8_t bit);
+
+    // clock cycles
+    uint8_t cycles = 0;         // The number of cycles remaining for current instruction
+    uint32_t total_cycles = 0;  // for debugging purpose mostly
+
 private:
-    void Execute(uint8_t opcode);
+    uint8_t Execute(uint8_t opcode);
     void SetFlag(uint8_t bit, bool value);
 
     Bus* bus = nullptr;
