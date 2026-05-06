@@ -1,5 +1,5 @@
 # Cartridge
-Its job is to load the ROM along with formatting and organizing data such that the CPU and PPU can understand it.
+Its job is to load the ROM along with formatting and organizing data such that the CPU and PPU can understand it. 
 
 **Class Members:**
 - `romLoad`: `true` if file opened successfully.
@@ -7,6 +7,7 @@ Its job is to load the ROM along with formatting and organizing data such that t
 - `mirror`: How the screen wraps around.
 - `PRGMemory`: This holds the Game Code.
 - `CHRMemory`: This holds the Graphics.
+- `pMapper`: A polymorphic smart pointer (`std::shared_ptr<Mapper>`) pointing to the specific mapper logic currently loaded (e.g., `Mapper_000`).
 
 **Procedure:**
 1. Open the ROM file.
@@ -22,7 +23,8 @@ Its job is to load the ROM along with formatting and organizing data such that t
 6. There is sometimes junk code of 512 bytes at the starting of header (usually there for cheat codes). Bit 2 of Flag 6 tells if junk code is there or not. This junk code is called a trainer.
 7. `mirror = flag6 & 0x01;` Extract the last bit of flag 6 to check mirror.
 8. Then load `PRGMemory` and `CHRMemory`.
-9. Set `romLoad` to `true`.
+9. Instantiate the correct Mapper object based on `mapperID` and assign it to `pMapper`.
+10. Set `romLoad` to `true`.
 
     ```text
     [.nes file on disk]
@@ -44,6 +46,18 @@ Its job is to load the ROM along with formatting and organizing data such that t
     - Sprites & Tiles
     - Size: 8 * 1024 * CHR count
     ```
+
+---
+
+# Mappers
+Mappers sit between the Cartridge memory arrays and the CPU/PPU. Because the NES CPU can only see a limited amount of memory (`0x8000` to `0xFFFF` for cartridges), mappers act as "translators" or "bank switchers" to swap larger amounts of ROM data in and out of that narrow CPU window.
+
+- **Base `Mapper` Class:** 
+    An abstract class that defines `cpuMapRead` and `cpuMapWrite`. The Cartridge passes the raw CPU address to the mapper, and the mapper returns the translated physical index of the `PRGMemory` or `CHRMemory` array.
+- **`Mapper_000` (NROM):** 
+    The simplest mapper (no bank switching). It supports either 16KB or 32KB of PRG ROM. 
+    - If a game has 32KB of PRG, it fills the entire `0x8000`-`0xFFFF` window. 
+    - If a game has 16KB of PRG, it is mirrored. Reading from `0xC000` will wrap around and read the same data as `0x8000`. This is handled by masking the CPU address with `0x3FFF` (16KB) or `0x7FFF` (32KB).
 
 ---
 
@@ -118,5 +132,6 @@ Does all the memory management like an MMU.
 	- `LoadProgram(vector<uint8_t>& program, uint16_t startAddr)`: Writes the entire program to memory starting at `startAddr`.
 	- `Clock()`: Fetches Opcode using `bus->cpuRead(PC)` and executes it via `Execute()`, decrementing cycles.
 	- `Run()`: Endless loop driving the `Clock()` function until a `BRK` instruction (`0x00`) is hit.
+    - `GetDebugString()`: Generates a perfectly formatted snapshot of the CPU's current registers (e.g., `C000 A:AA X:01 Y:02 P:24 SP:FD`). This is used to diff against the golden `nestest.log` to ensure 100% cycle-accurate CPU emulation.
 	- `SetFlag(uint8_t bit, bool value)`: Turns specific bits in the status register `P` ON (`|`) or OFF (`& ~`).
 	- `GetFlag(uint8_t bit)`: Returns `(P & bit) != 0`.

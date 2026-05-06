@@ -41,12 +41,11 @@ void test_nmi() {
     bus.ConnectCartridge(&cart);
     bus.cpu.Reset();
 
-    // Set NMI vector to 0x8100 directly in ROM memory
-    // 0xFFFA maps to 0x7FFA in a 16KB PRG ROM
-    cart.PRGMemory[0x7FFA] = 0x00;
-    cart.PRGMemory[0x7FFB] = 0x81;
+    // 0xFFFA masked with 0x3FFF (16KB max) maps to 0x3FFA
+    cart.PRGMemory[0x3FFA] = 0x00;
+    cart.PRGMemory[0x3FFB] = 0x81;
 
-    // Put RTI (0x40) at 0x8100 -> maps to 0x0100 in ROM
+    // Put RTI (0x40) at 0x8100 -> masked with 0x3FFF maps to 0x0100 in ROM
     cart.PRGMemory[0x0100] = 0x40;
 
     bus.cpu.PC = 0x8000;
@@ -82,12 +81,11 @@ void test_irq() {
     // Clear Interrupt Disable flag (I is bit 2)
     bus.cpu.P &= ~0x04;
 
-    // Set IRQ vector to 0x8200 directly in ROM memory
-    // 0xFFFE maps to 0x7FFE in a 16KB PRG ROM
-    cart.PRGMemory[0x7FFE] = 0x00;
-    cart.PRGMemory[0x7FFF] = 0x82;
+    // 0xFFFE masked with 0x3FFF (16KB max) maps to 0x3FFE
+    cart.PRGMemory[0x3FFE] = 0x00;
+    cart.PRGMemory[0x3FFF] = 0x82;
 
-    // Put RTI (0x40) at 0x8200 -> maps to 0x0200 in ROM
+    // Put RTI (0x40) at 0x8200 -> masked with 0x3FFF maps to 0x0200 in ROM
     cart.PRGMemory[0x0200] = 0x40;
 
     bus.cpu.PC = 0x8000;

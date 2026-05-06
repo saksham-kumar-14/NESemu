@@ -33,6 +33,8 @@ public:
     uint8_t cycles = 0;         // The number of cycles remaining for current instruction
     uint32_t total_cycles = 0;  // for debugging purpose mostly
 
+    std::string GetDebugString();   // for diagnostic logging
+
 private:
     uint8_t Execute(uint8_t opcode);
     void SetFlag(uint8_t bit, bool value);

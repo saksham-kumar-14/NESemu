@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <iostream>
 #include <sys/types.h>
+#include <cstdio>
 #include "bus.h"
 
 enum FLAGS {
@@ -80,15 +81,26 @@ bool CPU6502::GetFlag(uint8_t bit){
     return (P & bit)  != 0;
 }
 
+std::string CPU6502::GetDebugString() {
+    char buffer[128];
+    //  log formatting: A:00 X:00 Y:00 P:24 SP:FD
+    snprintf(buffer, sizeof(buffer), "%04X  A:%02X X:%02X Y:%02X P:%02X SP:%02X",
+        PC, A, X, Y, P, SP);
+    return std::string(buffer);
+}
+
 void CPU6502::Clock(){
-    // if cycle is 0 => previous instruction is finished
     if(cycles == 0){
+        // DIAGNOSTIC LOGGING
+        // std::cout << GetDebugString() << "\n";
+        // if cycle is 0 => previous instruction is finished
         uint8_t opcode = bus->cpuRead(PC++);
         cycles = Execute(opcode);
     }
     --cycles;
     ++total_cycles;
 }
+
 
 // Returns the CPU cycles it will take to run
 uint8_t CPU6502::Execute(uint8_t opcode){
