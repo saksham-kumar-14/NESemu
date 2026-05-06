@@ -34,3 +34,13 @@ add_nes_test(test_bus_integration tests/bus_integration.cpp)
 add_nes_test(test_cartridge tests/cartridge.cpp)
 add_nes_test(test_ram_mirroring tests/ram_mirroring.cpp)
 add_nes_test(test_mapper_000 tests/mapper_000.cpp)
+
+# nes test golden log verification
+add_executable(run_nestest tests/nestest.cpp)
+target_link_libraries(run_nestest PRIVATE nes_core)
+add_custom_command(
+    TARGET run_nestest POST_BUILD
+    COMMAND run_nestest
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    COMMENT "Running nestest.nes and verifying official opcodes..."
+)

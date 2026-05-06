@@ -555,7 +555,11 @@ uint8_t CPU6502::Execute(uint8_t opcode){
         case 0x48: PUSH(A); return 3;
         case 0x08: PUSH(P | 0x30); return 3;
         case 0x68: A = PULL(); UPDATE_ZN(A); return 4;
-        case 0x28: P = PULL(); P |= U; return 4;
+        case 0x28:
+            P = PULL();
+            P &= ~B; // Clear the B flag
+            P |= U; // Ensure the U flag is always 1.
+            return 4;
 
         // JUMPS & SUBROUTINES
         case 0x4C: { // JMP ABS
@@ -584,7 +588,9 @@ uint8_t CPU6502::Execute(uint8_t opcode){
             return 6;
         }
         case 0x40: { // RTI
-            P = PULL(); P |= U;
+            P = PULL();
+            P &= ~B; // Clear the B flag
+            P |= U;  // Ensure the U flag is always 1.
             uint16_t lo = PULL();
             uint16_t hi = PULL();
             PC = (hi << 8) | lo;

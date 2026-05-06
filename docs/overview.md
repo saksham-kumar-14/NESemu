@@ -94,7 +94,7 @@ Does all the memory management like an MMU.
 	- *Note that only `PC` is `uint16_t`, others are `uint8_t`.*
 
 - **Hardware Interrupts**
-	- `NMI()` (Non-Maskable Interrupt): Usually triggered by the PPU every frame (VBlank). It forces the CPU to pause, pushes the current `PC` and Status Register (`P`) to the stack, sets the Interrupt Disable flag (`I`), and jumps to the address hardcoded at memory vector `0xFFFA`-`0xFFFB`. Takes 8 cycles.
+	- `NMI()` (Non-Maskable Interrupt): Usually triggered by the PPU every frame (VBlank). It forces the CPU to pause, pushes the current `PC` and Status Register (`P`) to the stack, sets the Interrupt Disable flag (`I`), and jumps to the address hardcoded at memory vector `0xFFFA`-`0xFFFB`. Takes 8 cycles, this is almost exclusively used by the PPU (the graphics chip). The PPU draws the screen 60 times a second. Every time it finishes drawing a frame, it fires an NMI to the CPU. It essentially screams: "I'm done drawing! The screen is in VBlank! Send me the graphics for the next frame right now before the TV starts drawing again!"
 	- `IRQ()` (Interrupt Request): A software-maskable interrupt (can be ignored if the `I` flag is set). If allowed, it behaves like an NMI but jumps to the vector stored at `0xFFFE`-`0xFFFF`. Takes 7 cycles.
 
 - **Addressing Modes**
