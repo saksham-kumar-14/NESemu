@@ -13,4 +13,7 @@ public:
     std::vector<std::uint8_t> CHRMemory;
 
     Cartridge(const std::string& filename);
+
+    bool cpuRead(uint16_t addr, uint8_t& data);
+    bool cpuWrite(uint16_t addr, uint8_t data);
 };

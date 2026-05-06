@@ -52,3 +52,26 @@ Cartridge::Cartridge(const std::string& filename) {
     romLoad = true;
     ifs.close();
 }
+
+bool Cartridge::cpuRead(uint16_t addr, uint8_t& data) {
+    if (addr >= 0x8000 && addr <= 0xFFFF) {
+        if (!PRGMemory.empty()) {
+            uint32_t mapped = addr - 0x8000;
+            if (PRGMemory.size() == 0x4000)
+                mapped %= 0x4000;
+            data = PRGMemory[mapped];
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Cartridge::cpuWrite(uint16_t addr, uint8_t data) {
+    if (addr >= 0x8000 && addr <= 0xFFFF) {
+        // Normally PRG ROM is read-only. Writers here are usually talking to a mapper.
+        // For a basic NROM mapper (mapper 0), we can just ignore writes.
+        // But for mapper development we might want to intercept it later.
+        return true; 
+    }
+    return false;
+}

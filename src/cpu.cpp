@@ -31,6 +31,36 @@ void CPU6502::Reset(){
     PC = (hi << 8) | lo;    // Little endian
 }
 
+void CPU6502::NMI() {
+    bus->cpuWrite(0x0100 + SP--, (PC >> 8) & 0xFF);
+    bus->cpuWrite(0x0100 + SP--, PC & 0xFF);
+    bus->cpuWrite(0x0100 + SP--, P | U); // Set Unused flag, but not Break flag
+
+    SetFlag(I, true);
+
+    uint16_t lo = bus->cpuRead(0xFFFA);
+    uint16_t hi = bus->cpuRead(0xFFFB);
+    PC = (hi << 8) | lo;
+
+    cycles = 8;
+}
+
+void CPU6502::IRQ() {
+    if (!GetFlag(I)) {
+        bus->cpuWrite(0x0100 + SP--, (PC >> 8) & 0xFF);
+        bus->cpuWrite(0x0100 + SP--, PC & 0xFF);
+        bus->cpuWrite(0x0100 + SP--, P | U); // Set Unused flag, but not Break flag
+
+        SetFlag(I, true);
+
+        uint16_t lo = bus->cpuRead(0xFFFE);
+        uint16_t hi = bus->cpuRead(0xFFFF);
+        PC = (hi << 8) | lo;
+
+        cycles = 7;
+    }
+}
+
 void CPU6502::LoadProgram(const std::vector<uint8_t>& program, uint16_t startAddr){
     for(int i = 0; i < program.size(); ++i){
         bus->cpuWrite(startAddr + i, program[i]);

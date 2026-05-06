@@ -17,6 +17,8 @@ public:
     CPU6502();
 
     void Reset();
+    void NMI();
+    void IRQ();
     void LoadProgram(const std::vector<uint8_t>& program, uint16_t startAddr);
     void Clock();
     void Run();
