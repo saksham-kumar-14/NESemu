@@ -1,0 +1,31 @@
+name: CI
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev cmake g++
+
+      - name: Grant execute permission for build.sh
+        run: chmod +x build.sh
+
+      - name: Build and Verify (nestest)
+        run: ./build.sh
+
+      - name: Run CTest Suite
+        run: |
+          # Assuming your build.sh creates and compiles inside a 'build' folder
+          cd build
+          ctest --output-on-failure
