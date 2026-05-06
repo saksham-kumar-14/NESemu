@@ -2,3 +2,4 @@
 *.nes
 nes_emu
 .DS_Store
+!nestest.nes
