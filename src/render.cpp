@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     Bus bus;
     PPU ppu;
 
-    std::string rom_path = "DonkeyKong.nes";
+    std::string rom_path = "nestest.nes";
     Cartridge cart(rom_path);
 
     if (!cart.romLoad) {
