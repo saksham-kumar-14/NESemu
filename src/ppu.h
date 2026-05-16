@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <array>
 #include <iostream>
+#include "cpu.h"
 
 class PPU {
 public:
@@ -15,6 +16,11 @@ public:
     void Clock();
 
     bool frame_complete = false;
+
+    CPU6502* cpu = nullptr;
+    void ConnectCPU(CPU6502* c){
+        cpu = c;
+    }
 
 private:
     std::array<uint8_t, 2048> nametable;        // 2KB Internal VRAM for Nametables (enough for 2 physical screens)

@@ -191,10 +191,23 @@ Does all the memory management like an MMU.
 
 ---
 
-1. **Pattern Memory**
+**Pattern Memory**
   - It is split into two 4Kbs each section. One section handles tiles and other handles backgrounds. crazy
   - Each section is a 16x16 grid consisting of tiles. Each tile is 8x8 pixels (represented as bitmap with 2 bits per pixel). Hence we can choose from four colors.
   - The information for a tile is stored in 2 bit-planes (LSB and MSB), the actual value of a tile is the sum from this LSB and MSB planes
 
 <img src="/assets/palletesLayout.png" alt="Palletes Layout" width="500">
   - The 4th pixel might seem unused here, but it actually mirrors the background color. So yeah
+
+Object Attribute Memory is completely separate from the rest of the PPU memory space. It holds 4 bytes of configuration data for up to 64 sprites (Y-position, Tile Index, Attributes/Flipping, and X-position).
+
+`VBLANK` : that specific window of time while the TV's electron gun is turned off ("blanked") and traveling from the bottom of the screen back up to the top.
+
+**The PPU regsiters**
+- `PPUCTRL (WRITE ONLY)`
+  - It tells ppu wheter to autoincrement the memory pointer by +1 (for drawing horizontal) or by +32 (for drawing vertical). It also has `generate_nmi` bit which is a toggle switching allowing PPU to interrupt CPU during VBLANK
+- `PPUMASK (WRITE ONLY)`
+  - Controls background properites (bg rendering, color properties, etc)
+- `PPUSTATUS (READ ONLY)`
+  - Allows CPU to check PPU's health. It has `vertical_blank` bit which flips to **1** when PPU finishes drawing frame
+  - Whenever the CPU reads this register, the PPU automatically forces `address_latch = 0 `and clears the VBLANK flag bit.

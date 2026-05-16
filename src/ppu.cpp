@@ -1,4 +1,5 @@
 #include "ppu.h"
+#include <cstdint>
 
 PPU::PPU() {
     ctrl.reg = 0x00;
@@ -14,8 +15,19 @@ void PPU::cpuWrite(uint16_t addr, uint8_t data) {
     // incoming address from CPU Bus is already masked (addr & 0x0007)
     switch (addr) {
         case 0x0000: // 0x2000: PPUCTRL
+        {
+            uint8_t prev_generate_nmi = ctrl.generate_nmi;
             ctrl.reg = data;
+
+            // if prev NMI is ON, we are in VBLANK
+            // trigger an immediate execution interrupt
+            if(prev_generate_nmi == 0 and ctrl.generate_nmi == 1 and status.vertical_blank == 1){
+                if(cpu != nullptr){
+                    cpu->NMI();
+                }
+            }
             break;
+        }
 
         case 0x0001: // 0x2001: PPUMASK
             mask.reg = data;
@@ -167,13 +179,46 @@ void PPU::ppuWrite(uint16_t addr, uint8_t data) {
 }
 
 void PPU::Clock() {
+    // Visible scanlines (from 0 to 239)
+    if(scanline >= 0 and scanline <= 239){
+        if(cycle >= 1 and cycle <= 256){
+
+        }
+    }
+
+    // post render scanline (240)
+    if(scanline == 240){
+        // idle buffer it is
+    }
+
+    // VBLANK scanlines 241 to 260
+    if(scanline == 241 and cycle == 1){
+        status.vertical_blank = 1;  // VBLANK STARTS!!!!!
+
+        if(ctrl.generate_nmi and cpu != nullptr) {
+            cpu->NMI();
+        }
+    }
+
+    // pre render scanline (261)
+    if(scanline == 261){
+        if(cycle == 1){
+            // end of VBLANK. clear flags to prepare for next visible frame
+            status.vertical_blank = 0;
+            status.sprite_zero_hit = 0;
+            status.sprite_overflow = 0;
+        }
+    }
+
+    // advance the clock pipeline matrix
     cycle++;
-    if (cycle >= 341) {
+    if(cycle >= 341){
         cycle = 0;
         scanline++;
-        if (scanline >= 262) {
+        if(scanline >= 262){
             scanline = 0;
             frame_complete = true;
         }
     }
+
 }
