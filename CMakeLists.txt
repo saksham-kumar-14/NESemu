@@ -9,6 +9,7 @@ add_library(nes_core
     src/cartridge.cpp
     src/bus.cpp
     src/cpu.cpp
+    src/ppu.cpp
 )
 target_include_directories(nes_core PUBLIC src)
 
@@ -34,6 +35,7 @@ add_nes_test(test_bus_integration tests/bus_integration.cpp)
 add_nes_test(test_cartridge tests/cartridge.cpp)
 add_nes_test(test_ram_mirroring tests/ram_mirroring.cpp)
 add_nes_test(test_mapper_000 tests/mapper_000.cpp)
+add_nes_test(test_ppu tests/ppu.cpp)
 
 # nes test golden log verification
 add_executable(run_nestest tests/nestest.cpp)
