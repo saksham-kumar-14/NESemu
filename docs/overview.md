@@ -110,9 +110,8 @@ public:
 
 ---
 
-# CPU & BUS
+# BUS
 
-## BUS
 Does all the memory management like an MMU.
 - **Memory map handled by Bus:**
 	- `0x0000 - 0x07FF` : 2KB internal RAM
@@ -179,9 +178,23 @@ Does all the memory management like an MMU.
         uint16_t PC = (bus->cpuRead(0xFFFD) << 8) | bus->cpuRead(0xFFFC); 
         ```
 	- `LoadProgram(vector<uint8_t>& program, uint16_t startAddr)`: Writes the entire program to memory starting at `startAddr`.
-	- `Clock()`: Fetches Opcode using `bus->cpuRead(PC)` and executes it via `Execute()`, decrementing cycles.
+	- `Clock()`: Fetches Opcode using `bus->cpuRead(PC)` and executes it using `Execute()`, decrementing cycles.
 	- `Run()`: Endless loop driving the `Clock()` function until a `BRK` instruction (`0x00`) is hit.
     - **Diagnostic Logging (`GetDebugString()`)**: Generates a perfectly formatted snapshot of the CPU's current registers (e.g., `C000 A:AA X:01 Y:02 P:24 SP:FD`). This powers the automated test pipeline, diffing the emulator's execution state against the golden hardware standard. **The CPU officially passes the rigorous `nestest.log` validation suite for all 5003 official opcodes without a single desync**, ensuring 100% cycle-accurate execution.
 	- `SetFlag(uint8_t bit, bool value)`: Turns specific bits in the status register `P` ON (`|`) or OFF (`& ~`).
 	- `GetFlag(uint8_t bit)`: Returns `(P & bit) != 0`.
-```
+
+---
+
+## PPU
+<img src="/assets/memLayout.png" alt="Memory layout" width="500">
+
+---
+
+1. **Pattern Memory**
+  - It is split into two 4Kbs each section. One section handles tiles and other handles backgrounds. crazy
+  - Each section is a 16x16 grid consisting of tiles. Each tile is 8x8 pixels (represented as bitmap with 2 bits per pixel). Hence we can choose from four colors.
+  - The information for a tile is stored in 2 bit-planes (LSB and MSB), the actual value of a tile is the sum from this LSB and MSB planes
+
+<img src="/assets/palletesLayout.png" alt="Palletes Layout" width="500">
+  - The 4th pixel might seem unused here, but it actually mirrors the background color. So yeah
