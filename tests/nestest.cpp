@@ -52,7 +52,7 @@ int main() {
         myLogFile << myState << "\n";
 
         // also write in terminal
-        std::cout << myState << '\n';
+        // std::cout << myState << '\n';
 
         char expState[128];
         snprintf(expState, sizeof(expState), "%s A:%s X:%s Y:%s P:%s SP:%s",

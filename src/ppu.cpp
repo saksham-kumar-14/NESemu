@@ -39,8 +39,8 @@ void PPU::cpuWrite(uint16_t addr, uint8_t data) {
 
         case 0x0006: // 0x2006: PPUADDR
             if (address_latch == 0) {
-                // First write: High Byte (mask out bit 14, 15 since PPU address spaces are 14-bit)
-                ppu_address = (ppu_address & 0x00FF) | ((data & 0x3F) << 8);
+                // First write: High Byte. Clean out bits 14 & 15 immediately.
+                ppu_address = ((data & 0x3F) << 8) | (ppu_address & 0x00FF);
                 address_latch = 1;
             } else {
                 // Second write: Low Byte
@@ -50,10 +50,12 @@ void PPU::cpuWrite(uint16_t addr, uint8_t data) {
             break;
 
         case 0x0007: // 0x2007: PPUDATA
-            ppuWrite(ppu_address, data);
+            // Force mask to 14-bit PPU range right here to prevent downstream array overflow
+            ppuWrite(ppu_address & 0x3FFF, data);
 
-            // Increment address pointer based on PPUCTRL setup (+1 for horizontal, +32 for vertical)
+            // Auto-increment pointer
             ppu_address += (ctrl.increment_mode ? 32 : 1);
+            ppu_address &= 0x3FFF; // Keep the actual register bound to 14-bit space
             break;
     }
 }
@@ -90,17 +92,21 @@ uint8_t PPU::cpuRead(uint16_t addr) {
             break;
 
         case 0x0007: // 0x2007: PPUDATA
-            // Standard VRAM reads are delayed by 1 cycle through a buffer
-            data = ppu_data_buffer;
-            ppu_data_buffer = ppuRead(ppu_address);
+            // Clean the address pointer to ensure clear routing
+            uint16_t clean_addr = ppu_address & 0x3FFF;
 
-            // !!!!!!!!!EXCEPTION: Palette reads ($3F00-$3FFF) are returned immediately without buffer delay!!!!!!!!
-            if (ppu_address >= 0x3F00) {
-                data = ppu_data_buffer;
+            data = ppu_data_buffer;
+
+            //update the delay buffer with current VRAM data
+            ppu_data_buffer = ppuRead(clean_addr);
+
+            if (clean_addr >= 0x3F00) {
+                data = ppuRead(clean_addr);
             }
 
-            // auto increments pointer
+            // auto increment the address pointer
             ppu_address += (ctrl.increment_mode ? 32 : 1);
+            ppu_address &= 0x3FFF; // Maintain 14-bit bounds
             break;
     }
     return data;
