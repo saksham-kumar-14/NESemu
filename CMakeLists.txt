@@ -3,7 +3,8 @@ project(NES_Emulator VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 
-find_package(SDL2 REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
 
 add_library(nes_core
     src/cartridge.cpp
@@ -46,4 +47,11 @@ add_custom_command(
     COMMAND run_nestest
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
     COMMENT "Running nestest.nes and verifying official opcodes..."
+)
+
+# MAIN emulator app
+add_executable(nes_emulator src/render.cpp)
+target_link_libraries(nes_emulator PRIVATE nes_core PkgConfig::SDL2)
+target_compile_definitions(nes_emulator PRIVATE
+    ROM_DIR="${CMAKE_CURRENT_SOURCE_DIR}/tests/"
 )

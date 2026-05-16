@@ -1,3 +1,4 @@
+// cartridge.h
 #pragma once
 #include <vector>
 #include <string>
@@ -21,6 +22,11 @@ public:
 
     Cartridge(const std::string& filename);
 
+    // CPU Bus Methods
     bool cpuRead(uint16_t addr, uint8_t& data);
     bool cpuWrite(uint16_t addr, uint8_t data);
+
+    // PPU Bus Methods
+    uint8_t ppuRead(uint16_t addr);
+    void ppuWrite(uint16_t addr, uint8_t data);
 };

@@ -124,13 +124,15 @@ uint8_t PPU::cpuRead(uint16_t addr) {
     return data;
 }
 
-
 uint8_t PPU::ppuRead(uint16_t addr) {
     addr &= 0x3FFF; // Cap at 14-bit PPU boundary
 
     if (addr >= 0x0000 && addr <= 0x1FFF) {
         // CHR ROM/RAM space on the Cartridge (Pattern Tables)
         // Handled by - return cartridge->ppuRead(addr);
+        if (cart != nullptr) {
+            return cart->ppuRead(addr);
+        }
         return 0x00;
     }
     else if (addr >= 0x2000 && addr <= 0x3EFF) {
@@ -162,6 +164,9 @@ void PPU::ppuWrite(uint16_t addr, uint8_t data) {
     if (addr >= 0x0000 && addr <= 0x1FFF) {
         // CHR RAM configuration writes (if cartridge supports it)
         // Handled by - cartridge->ppuWrite(addr, data);
+        if (cart != nullptr) {
+            cart->ppuWrite(addr, data);
+        }
     }
     else if (addr >= 0x2000 && addr <= 0x3EFF) {
         addr &= 0x0FFF;
@@ -221,4 +226,40 @@ void PPU::Clock() {
         }
     }
 
+}
+
+void PPU::drawDebugPatterntable(uint8_t table_index) {
+    for(uint16_t tileY = 0; tileY < 16; ++tileY) {
+        for(uint16_t tileX = 0; tileX < 16; ++tileX) {
+
+            // byte offset in memory for this specific tile
+            uint16_t offset = tileY * 256 + tileX * 16;
+
+            // 8x8 is the tile
+            for(uint16_t row = 0; row < 8; ++row) {
+                // reads two bitplanes
+                uint16_t address = (table_index * 0x1000) + offset + row;
+                uint8_t lsb_bitplane = ppuRead(address);
+                uint8_t msb_bitplane = ppuRead(address + 8);
+
+                for(uint16_t col = 0; col < 8; ++col) {
+                    uint8_t lsb = (lsb_bitplane & (0x80 >> col)) > 0;
+                    uint8_t msb = (msb_bitplane & (0x80 >> col)) > 0;
+                    uint8_t pixel_color = (msb << 1) | lsb;
+
+                    uint8_t system_color = 0x0F; // Black
+                    if (pixel_color == 1) system_color = 0x2D; // Dark Gray
+                    if (pixel_color == 2) system_color = 0x00; // Light Gray
+                    if (pixel_color == 3) system_color = 0x30; // White
+
+                    int x = (tileX * 8) + col;
+                    int y = (tileY * 8) + row;
+
+                    screen_pixels[y * 256 + x] = NES_SYSTEM_PALETTE[system_color];
+                }
+            }
+
+
+        }
+    }
 }

@@ -13,4 +13,7 @@ public:
     // Transform CPU bus address into PRG ROM physical address
     virtual bool cpuMapRead(uint16_t addr, uint32_t &mapped_addr) = 0;
     virtual bool cpuMapWrite(uint16_t addr, uint32_t &mapped_addr, uint8_t data = 0) = 0;
+
+    virtual bool ppuMapRead(uint16_t addr, uint32_t &mapped_addr) = 0;
+    virtual bool ppuMapWrite(uint16_t addr, uint32_t &mapped_addr) = 0;
 };

@@ -81,3 +81,18 @@ bool Cartridge::cpuWrite(uint16_t addr, uint8_t data) {
     }
     return false;
 }
+
+uint8_t Cartridge::ppuRead(uint16_t addr) {
+    uint32_t mapped_addr = 0;
+    if (pMapper->ppuMapRead(addr, mapped_addr)) {
+        return CHRMemory[mapped_addr];
+    }
+    return 0x00;
+}
+
+void Cartridge::ppuWrite(uint16_t addr, uint8_t data) {
+    uint32_t mapped_addr = 0;
+    if (pMapper->ppuMapWrite(addr, mapped_addr)) {
+        CHRMemory[mapped_addr] = data;
+    }
+}
